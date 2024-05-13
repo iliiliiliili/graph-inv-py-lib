@@ -26,7 +26,7 @@ class OConnections:
             + str(len(self.features))
             + " features of "
             + str(len(self.froms))
-            + " nodes)"
+            + " connections)"
         )
 
 
@@ -53,5 +53,5 @@ class OSpatialConnections(OConnections):
             + str(len(self.features))
             + " features of "
             + str(len(self.froms))
-            + " nodes)"
+            + " connections)"
         )
