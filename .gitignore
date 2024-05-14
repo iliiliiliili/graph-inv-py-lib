@@ -1,2 +1,5 @@
 .vscode
 *.pyc
+*.nbi
+*.nbc
+*.npy
