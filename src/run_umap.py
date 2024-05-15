@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from src import umap
 from src.umap import plot
-from sklearn.datasets import load_digits
 from fire import Fire
 import os
 
@@ -12,10 +11,34 @@ from ginv.transform_graph import (
     transform_graph_for_umap_connection_level,
     transform_connection_level_features_to_node_level_features,
     transform_graph_for_umap_node_knn_simple,
+    transform_graph_for_umap_node_knn_simple_full,
+    reduce_knn,
 )
 
 
-def node_graph_umap(node_count=0, plots_dir="./plots/umap", all_n_neighbours = [64, 32, 16, 8, 4, 2]):
+def create_umap_data_and_labels(dataset: IstanbulEinDataset, level="node"):
+    umap_data = {
+        "node": transform_graph_for_umap_node_level,
+        "connection": transform_graph_for_umap_connection_level,
+    }[level](dataset)
+
+    labels = np.copy(dataset.node_profits)
+    logs = np.log10(np.abs(labels))
+    logs[labels == 0] = 0
+    positive_labels = labels > 0
+    labels[positive_labels] = np.floor(logs[positive_labels])
+    labels[~positive_labels] = -np.floor(logs[~positive_labels])
+
+    return umap_data, labels
+
+
+def node_graph_umap(
+    node_count=0,
+    knn_method="simple_full",
+    plots_dir="./plots/umap",
+    all_n_neighbours=[64, 32, 16, 8, 4, 2],
+    name_suffix="",
+):
 
     os.makedirs(plots_dir, exist_ok=True)
 
@@ -27,39 +50,54 @@ def node_graph_umap(node_count=0, plots_dir="./plots/umap", all_n_neighbours = [
         print(dataset)
 
     print("Creating umap_data")
-    umap_data = transform_graph_for_umap_node_level(dataset)
-    labels = np.copy(dataset.node_profits)
-    logs = np.log10(np.abs(labels))
-    positive_labels = labels > 0
-    labels[positive_labels] = np.floor(logs[positive_labels])
-    labels[~positive_labels] = -np.floor(logs[~positive_labels])
+    umap_data, labels = create_umap_data_and_labels(dataset)
+
+    knn_function = {
+        "simple": transform_graph_for_umap_node_knn_simple,
+        "simple_full": transform_graph_for_umap_node_knn_simple_full,
+    }[knn_method]
+
+    knn = None
+    knn_distances = None
+
+    all_n_neighbours.sort(reverse=True)
+
+    name_suffix = ("_" + name_suffix) if len(name_suffix) > 0 else ""
 
     for n_neighbours in all_n_neighbours:
 
-            name = f"umap_istanbul_node_and_graph_level_simple_{dataset.node_count}n_{n_neighbours}nb"
+        name = f"umap_istanbul_node_and_graph_level_{knn_method}_{dataset.node_count}n_{n_neighbours}nb{name_suffix}"
 
-            knn, knn_distances, knn_size = transform_graph_for_umap_node_knn_simple(dataset, n_neighbours)
+        if knn is None:
+            knn, knn_distances = knn_function(dataset, n_neighbours)
+        else:
+            knn = reduce_knn(knn, n_neighbours)
+            knn_distances = reduce_knn(knn_distances, n_neighbours)
 
-            print(f"Fitting umap for {name}")
-            reducer = umap.UMAP(
-                n_neighbors=n_neighbours,
-                precomputed_knn=(knn, knn_distances)
-            )
-            mapper = reducer.fit(umap_data)
+        print(f"Fitting umap for {name}")
+        reducer = umap.UMAP(
+            n_neighbors=n_neighbours, precomputed_knn=(knn, knn_distances)
+        )
+        mapper = reducer.fit(umap_data)
 
-            print(f"Plotting for {name}")
-            umap.plot.points(mapper, labels=labels)
+        print(f"Plotting for {name}")
+        umap.plot.points(mapper, labels=labels)
 
-            plt.savefig(f"{plots_dir}/{name}.png")
+        plt.savefig(f"{plots_dir}/{name}.png")
 
-            print(f"Saving embeddings for {name}")
-            embeddings = reducer.transform(umap_data)
+        # print(f"Saving embeddings for {name}")
+        # embeddings = reducer.transform(umap_data)
+        # np.save(f"{plots_dir}/embeddings_{name}", embeddings)
 
-            np.save(f"{plots_dir}/embeddings_{name}", embeddings)
+        print()
 
-            print()
 
-def node_umap(node_count=0, plots_dir="./plots/umap", all_n_neighbours = [16, 8, 4, 2], all_min_dist = [0.4, 0.2]):
+def node_umap(
+    node_count=0,
+    plots_dir="./plots/umap",
+    all_n_neighbours=[16, 8, 4, 2],
+    all_min_dist=[0.4, 0.2],
+):
 
     os.makedirs(plots_dir, exist_ok=True)
 
@@ -71,12 +109,7 @@ def node_umap(node_count=0, plots_dir="./plots/umap", all_n_neighbours = [16, 8,
         print(dataset)
 
     print("Creating umap_data")
-    umap_data = transform_graph_for_umap_node_level(dataset)
-    labels = np.copy(dataset.node_profits)
-    logs = np.log10(np.abs(labels))
-    positive_labels = labels > 0
-    labels[positive_labels] = np.floor(logs[positive_labels])
-    labels[~positive_labels] = -np.floor(logs[~positive_labels])
+    umap_data, labels = create_umap_data_and_labels(dataset)
 
     for n_neighbours in all_n_neighbours:
         for min_dist in all_min_dist:
@@ -95,15 +128,19 @@ def node_umap(node_count=0, plots_dir="./plots/umap", all_n_neighbours = [16, 8,
 
             plt.savefig(f"{plots_dir}/{name}.png")
 
-            print(f"Saving embeddings for {name}")
-            embeddings = reducer.transform(umap_data)
-
-            np.save(f"{plots_dir}/embeddings_{name}", embeddings)
+            # print(f"Saving embeddings for {name}")
+            # embeddings = reducer.transform(umap_data)
+            # np.save(f"{plots_dir}/embeddings_{name}", embeddings)
 
             print()
 
 
-def connection_umap(node_count=0, plots_dir="./plots/umap", all_n_neighbours = [16, 8, 4, 2], all_min_dist = [0.4, 0.2]):
+def connection_umap(
+    node_count=0,
+    plots_dir="./plots/umap",
+    all_n_neighbours=[16, 8, 4, 2],
+    all_min_dist=[0.4, 0.2],
+):
 
     os.makedirs(plots_dir, exist_ok=True)
 
@@ -115,12 +152,7 @@ def connection_umap(node_count=0, plots_dir="./plots/umap", all_n_neighbours = [
         print(dataset)
 
     print("Creating umap_data")
-    umap_data = transform_graph_for_umap_connection_level(dataset)
-    labels = np.copy(dataset.node_profits)
-    logs = np.log10(np.abs(labels))
-    positive_labels = labels > 0
-    labels[positive_labels] = np.floor(logs[positive_labels])
-    labels[~positive_labels] = -np.floor(logs[~positive_labels])
+    umap_data, labels = create_umap_data_and_labels(dataset, "connection")
 
     for n_neighbours in all_n_neighbours:
         for min_dist in all_min_dist:
@@ -134,17 +166,18 @@ def connection_umap(node_count=0, plots_dir="./plots/umap", all_n_neighbours = [
             )
             mapper = reducer.fit(umap_data)
             connection_features = mapper.transform(umap_data)
-            node_features = transform_connection_level_features_to_node_level_features(dataset, connection_features)
+            node_features = transform_connection_level_features_to_node_level_features(
+                dataset, connection_features
+            )
 
             print(f"Plotting for {name}")
             plt.scatter(node_features[:, 0], node_features[:, 1], c=labels)
 
             plt.savefig(f"{plots_dir}/{name}.png")
 
-            print(f"Saving embeddings for {name}")
-            embeddings = reducer.transform(umap_data)
-
-            np.save(f"{plots_dir}/embeddings_connection_level_{name}", embeddings)
+            # print(f"Saving embeddings for {name}")
+            # embeddings = reducer.transform(umap_data)
+            # np.save(f"{plots_dir}/embeddings_connection_level_{name}", embeddings)
 
             print()
 
