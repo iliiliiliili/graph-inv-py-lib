@@ -1,0 +1,4 @@
+pytest
+umap
+numpy
+fire
