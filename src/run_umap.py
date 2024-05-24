@@ -20,6 +20,13 @@ from ginv.transform_graph import (
 )
 
 
+def save_embeddings(embeddings: np.ndarray, name):
+    np.save(f"{name}.npy", embeddings)
+
+    with open(f"{name}.bin", "bw") as f:
+        embeddings.T.tofile(f)
+
+
 def create_umap_data_and_labels(dataset: IstanbulEinDataset, level="node"):
     umap_data = {
         "node": transform_graph_for_umap_node_level,
@@ -38,14 +45,17 @@ def create_umap_data_and_labels(dataset: IstanbulEinDataset, level="node"):
 
 def node_graph_sparse_umap(
     node_count=0,
-    plots_dir="./plots/umap",
     all_n_neighbours=[64, 32, 16, 8, 4, 2],
     all_min_dist=[0.4, 0.2],
+    plots_dir="./plots/umap",
+    embeddings_dir="./plots/embeddings",
     weight_to_distance_scale=255.0,
     name_suffix="",
+    init="random",
 ):
 
     os.makedirs(plots_dir, exist_ok=True)
+    os.makedirs(embeddings_dir, exist_ok=True)
 
     dataset = IstanbulEinDataset("./data/istanbul")
 
@@ -72,6 +82,7 @@ def node_graph_sparse_umap(
             print(f"Fitting umap for {name}")
             reducer = umap.UMAP(
                 n_neighbors=n_neighbours,
+                init=init,
             )
             mapper = reducer.fit(csr_graph)
 
@@ -82,7 +93,7 @@ def node_graph_sparse_umap(
 
             # print(f"Saving embeddings for {name}")
             # embeddings = reducer.transform(umap_data)
-            # np.save(f"{plots_dir}/embeddings_{name}", embeddings)
+            # save_embeddings(embeddings, f"{embeddings_dir}/embeddings_{name}", )
 
             print()
 
@@ -90,14 +101,17 @@ def node_graph_sparse_umap(
 def node_graph_umap(
     node_count=0,
     knn_method="multilevel",
+    parametric_umap=False,
+    all_n_neighbours=[128, 64, 32, 16, 8, 4],
     plots_dir="./plots/umap",
-    all_n_neighbours=[64, 32, 16, 8, 4, 2],
+    embeddings_dir="./data/embeddings",
     name_suffix="",
     save_and_load_knn=True,
     knns_dir="./data/knn",
 ):
 
     os.makedirs(plots_dir, exist_ok=True)
+    os.makedirs(embeddings_dir, exist_ok=True)
 
     if save_and_load_knn:
         os.makedirs(knns_dir, exist_ok=True)
@@ -128,10 +142,10 @@ def node_graph_umap(
     for n_neighbours in all_n_neighbours:
 
         name = f"umap_istanbul_node_and_graph_level_{knn_method}_{dataset.node_count}n_{n_neighbours}nb{name_suffix}"
-        knn_path = f"{knns_dir}/knn_{knn_method}_{dataset.node_count}n_{n_neighbours}nb.npy"
-        knn_dist_path = (
-            f"{knns_dir}/knn_dist_{knn_method}_{dataset.node_count}n_{n_neighbours}nb.npy"
+        knn_path = (
+            f"{knns_dir}/knn_{knn_method}_{dataset.node_count}n_{n_neighbours}nb.npy"
         )
+        knn_dist_path = f"{knns_dir}/knn_dist_{knn_method}_{dataset.node_count}n_{n_neighbours}nb.npy"
 
         if knn is None:
 
@@ -163,7 +177,7 @@ def node_graph_umap(
 
         # print(f"Saving embeddings for {name}")
         # embeddings = reducer.transform(umap_data)
-        # np.save(f"{plots_dir}/embeddings_{name}", embeddings)
+        # save_embeddings(embeddings, f"{embeddings_dir}/embeddings_{name}", )
 
         print()
 
@@ -171,7 +185,8 @@ def node_graph_umap(
 def node_umap(
     node_count=0,
     plots_dir="./plots/umap",
-    all_n_neighbours=[16, 8, 4, 2],
+    embeddings_dir="./data/embeddings",
+    all_n_neighbours=[128, 64, 32, 16, 8, 4],
     all_min_dist=[0.4, 0.2],
 ):
 
@@ -206,7 +221,7 @@ def node_umap(
 
             # print(f"Saving embeddings for {name}")
             # embeddings = reducer.transform(umap_data)
-            # np.save(f"{plots_dir}/embeddings_{name}", embeddings)
+            # save_embeddings(embeddings, f"{embeddings_dir}/embeddings_{name}", )
 
             print()
 
