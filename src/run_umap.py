@@ -1,3 +1,4 @@
+from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 from src import umap
@@ -6,6 +7,7 @@ from fire import Fire
 import os
 
 from ginv.istanbul_ein_dataset import IstanbulEinDataset
+from ginv.insider_network_snapshot_dataset import InsiderNetworkSnapshotDataset
 from ginv.transform_graph import (
     transform_graph_for_umap_node_level,
     transform_graph_for_umap_connection_level,
@@ -27,7 +29,7 @@ def save_embeddings(embeddings: np.ndarray, name):
         embeddings.T.tofile(f)
 
 
-def create_umap_data_and_labels(dataset: IstanbulEinDataset, level="node"):
+def create_umap_data_and_labels_istanbul(dataset: IstanbulEinDataset, level="node"):
     umap_data = {
         "node": transform_graph_for_umap_node_level,
         "connection": transform_graph_for_umap_connection_level,
@@ -39,6 +41,19 @@ def create_umap_data_and_labels(dataset: IstanbulEinDataset, level="node"):
     positive_labels = labels > 0
     labels[positive_labels] = np.floor(logs[positive_labels])
     labels[~positive_labels] = -np.floor(logs[~positive_labels])
+
+    return umap_data, labels
+
+
+def create_umap_data_and_labels_insider_snapshot(
+    dataset: InsiderNetworkSnapshotDataset, level="node"
+):
+    umap_data = {
+        "node": transform_graph_for_umap_node_level,
+        "connection": transform_graph_for_umap_connection_level,
+    }[level](dataset)
+
+    labels = np.copy(dataset.node_gender)
 
     return umap_data, labels
 
@@ -65,7 +80,7 @@ def node_graph_sparse_umap(
         print(dataset)
 
     print("Creating umap_data")
-    umap_data, labels = create_umap_data_and_labels(dataset)
+    umap_data, labels = create_umap_data_and_labels_istanbul(dataset)
 
     print("Creating csr matrix")
     csr_graph = transform_graph_into_a_csr_matrix(dataset)
@@ -124,7 +139,7 @@ def node_graph_umap(
         print(dataset)
 
     print("Creating umap_data")
-    umap_data, labels = create_umap_data_and_labels(dataset)
+    umap_data, labels = create_umap_data_and_labels_istanbul(dataset)
 
     knn_function = {
         "simple": transform_graph_for_umap_node_knn_simple,
@@ -188,11 +203,21 @@ def node_umap(
     embeddings_dir="./data/embeddings",
     all_n_neighbours=[128, 64, 32, 16, 8, 4],
     all_min_dist=[0.4, 0.2],
+    dataset_name="insider_snapshot",
+    insider_snapshot_day_id=0,
 ):
-
+    
+    plots_dir = Path(plots_dir) / "node"
     os.makedirs(plots_dir, exist_ok=True)
 
-    dataset = IstanbulEinDataset("./data/istanbul")
+    if dataset_name == "istanbul_ein":
+        dataset = IstanbulEinDataset("./data/istanbul")
+    elif dataset_name == "insider_snapshot":
+        dataset = InsiderNetworkSnapshotDataset(
+            "./data/insider-network", insider_snapshot_day_id
+        )
+    else:
+        raise ValueError(f"Unknown dataset name {dataset_name}")
 
     if node_count > 0:
         print("Reducing the dataset")
@@ -200,12 +225,18 @@ def node_umap(
         print(dataset)
 
     print("Creating umap_data")
-    umap_data, labels = create_umap_data_and_labels(dataset)
+    
+    if dataset_name == "istanbul_ein":
+        umap_data, labels = create_umap_data_and_labels_istanbul(dataset)
+    elif dataset_name == "insider_snapshot":
+        umap_data, labels = create_umap_data_and_labels_insider_snapshot(dataset)
+    else:
+        raise ValueError(f"Unknown dataset name {dataset_name}")
 
     for n_neighbours in all_n_neighbours:
         for min_dist in all_min_dist:
 
-            name = f"umap_istanbul_{dataset.node_count}n_{n_neighbours}nb_{str(min_dist).replace('.', '')}d"
+            name = f"umap_{dataset_name}_{dataset.node_count}n_{n_neighbours}nb_{str(min_dist).replace('.', '')}d"
 
             print(f"Fitting umap for {name}")
             reducer = umap.UMAP(
@@ -243,7 +274,7 @@ def connection_umap(
         print(dataset)
 
     print("Creating umap_data")
-    umap_data, labels = create_umap_data_and_labels(dataset, "connection")
+    umap_data, labels = create_umap_data_and_labels_istanbul(dataset, "connection")
 
     for n_neighbours in all_n_neighbours:
         for min_dist in all_min_dist:

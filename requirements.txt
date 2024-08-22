@@ -2,3 +2,10 @@ pytest
 umap
 numpy
 fire
+matplotlib
+scikit-learn
+numba
+tqdm
+pynndescent
+umap-learn[plot]
+dask[dataframe]
