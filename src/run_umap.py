@@ -123,15 +123,27 @@ def node_graph_umap(
     name_suffix="",
     save_and_load_knn=True,
     knns_dir="./data/knn",
+    dataset_name="insider_snapshot",
+    insider_snapshot_day_id=0,
 ):
+
+    plots_dir = Path(plots_dir) / "node_graph"
+    embeddings_dir = Path(embeddings_dir) / "node_graph"
 
     os.makedirs(plots_dir, exist_ok=True)
     os.makedirs(embeddings_dir, exist_ok=True)
-
+    
     if save_and_load_knn:
         os.makedirs(knns_dir, exist_ok=True)
 
-    dataset = IstanbulEinDataset("./data/istanbul")
+    if dataset_name == "istanbul_ein":
+        dataset = IstanbulEinDataset("./data/istanbul")
+    elif dataset_name == "insider_snapshot":
+        dataset = InsiderNetworkSnapshotDataset(
+            "./data/insider-network", insider_snapshot_day_id
+        )
+    else:
+        raise ValueError(f"Unknown dataset name {dataset_name}")
 
     if node_count > 0:
         print("Reducing the dataset")
@@ -139,7 +151,15 @@ def node_graph_umap(
         print(dataset)
 
     print("Creating umap_data")
-    umap_data, labels = create_umap_data_and_labels_istanbul(dataset)
+    
+    if dataset_name == "istanbul_ein":
+        umap_data, labels = create_umap_data_and_labels_istanbul(dataset)
+        knn_use_weights = True
+    elif dataset_name == "insider_snapshot":
+        umap_data, labels = create_umap_data_and_labels_insider_snapshot(dataset)
+        knn_use_weights = False
+    else:
+        raise ValueError(f"Unknown dataset name {dataset_name}")
 
     knn_function = {
         "simple": transform_graph_for_umap_node_knn_simple,
@@ -156,7 +176,7 @@ def node_graph_umap(
 
     for n_neighbours in all_n_neighbours:
 
-        name = f"umap_istanbul_node_and_graph_level_{knn_method}_{dataset.node_count}n_{n_neighbours}nb{name_suffix}"
+        name = f"umap_{knn_method}_{dataset.node_count}n_{n_neighbours}nb{name_suffix}"
         knn_path = (
             f"{knns_dir}/knn_{knn_method}_{dataset.node_count}n_{n_neighbours}nb.npy"
         )
@@ -168,7 +188,7 @@ def node_graph_umap(
                 knn, knn_distances = load_knn(knn_path, knn_dist_path)
                 print("Loaded knn from file")
             else:
-                knn, knn_distances = knn_function(dataset, n_neighbours)
+                knn, knn_distances = knn_function(dataset, n_neighbours, use_weights=knn_use_weights)
 
                 if save_and_load_knn:
                     save_knn(knn, knn_distances, knn_path, knn_dist_path)

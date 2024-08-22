@@ -43,7 +43,7 @@ def transform_connection_level_features_to_node_level_features(graph: OGraph, fe
 
 
 def transform_graph_for_umap_node_knn_simple(
-    graph: OGraph, neighbours_count: int, dtype=np.int32, epsilon=0.0001
+    graph: OGraph, neighbours_count: int, dtype=np.int32, epsilon=0.0001, knn_use_weights=True,
 ):
 
     result = np.zeros([graph.node_count, neighbours_count], dtype=dtype)
@@ -96,6 +96,7 @@ def transform_graph_for_umap_node_knn_simple_full(
     weight_to_distance_scale=1.0,
     dtype=np.int32,
     epsilon=0.0001,
+    knn_use_weights=True,
 ):
 
     result = np.zeros([graph.node_count, neighbours_count], dtype=dtype)
@@ -205,6 +206,7 @@ def transform_graph_for_umap_node_knn_multilevel(
     weight_to_distance_scale=1.0,
     dtype=np.int32,
     epsilon=0.0001,
+    use_weights=True
 ):
 
     result = np.zeros([graph.node_count, neighbours_count], dtype=dtype)
@@ -222,7 +224,10 @@ def transform_graph_for_umap_node_knn_multilevel(
         if (i % 1000) == 0:
             print(f"[1/2] Creating multilevel knn {i}/{graph.connection_count}", end="\r")
 
-        dist = weight_to_distance_scale / (graph.connections.values[i] + epsilon)
+        if use_weights:
+            dist = weight_to_distance_scale / (graph.connections.values[i] + epsilon)
+        else:
+            dist = 1.0
 
         for idx, other_idx in [
             (graph.connections.froms[i], graph.connections.tos[i]),
