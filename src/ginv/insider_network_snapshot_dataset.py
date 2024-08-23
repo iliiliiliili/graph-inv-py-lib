@@ -24,7 +24,7 @@ class InsiderNetworkSnapshotDataset(OGraph):
         feature_files: List[str] | None = None,
     ) -> None:
         super().__init__(
-            OSpatialNodes(None, None, None, [None, None, None, None, None, None]),
+            OSpatialNodes(None, None, None, [None, None, None, None, None, None, None, None, None]),
             OSpatialConnections(None, None, None, None, None, None, []),
         )
 
