@@ -177,8 +177,10 @@ def node_graph_umap(
     knns_dir="./data/knn",
     dataset_name="insider_snapshot",
     label_features="all",
-    insider_snapshot_day_ids=[0, 0, 0],
+    insider_snapshot_day_ids=[0, 10],
     insider_snapshot_aggregation=SnapshotAggregation.CONNECTED_ONCE,
+    plot_connections=True,
+    subplot_size=25,
 ):
 
     plots_dir = Path(plots_dir) / "node_graph"
@@ -190,23 +192,22 @@ def node_graph_umap(
     if save_and_load_knn:
         os.makedirs(knns_dir, exist_ok=True)
 
+    extra_name = ""
+
     if dataset_name == "istanbul_ein":
         dataset = IstanbulEinDataset("./data/istanbul")
-
         if label_features == "all":
             label_features = [a.replace(".bin", "") for a in dataset.feature_files]
     elif dataset_name == "insider_snapshot":
-
         insider_snapshot_day_ids = parse_insider_days(insider_snapshot_day_ids)
-
         dataset = InsiderNetworkSnapshotDataset(
             "./data/insider-network",
             insider_snapshot_day_ids,
             aggregation=insider_snapshot_aggregation,
         )
-
         if label_features == "all":
             label_features = [a.replace(".bin", "") for a in dataset.feature_files]
+        extra_name = f"_{len(insider_snapshot_day_ids)}_days_agg_{insider_snapshot_aggregation.value}"
     else:
         raise ValueError(f"Unknown dataset name {dataset_name}")
 
@@ -244,7 +245,7 @@ def node_graph_umap(
 
     for n_neighbours in all_n_neighbours:
 
-        name = f"umap_{dataset_name}_{knn_method}_{dataset.node_count}n_{n_neighbours}nb{name_suffix}"
+        name = f"umap_{dataset_name}_{knn_method}_{dataset.node_count}n_{n_neighbours}nb{name_suffix}{extra_name}"
         knn_path = f"{knns_dir}/knn_{dataset_name}_{knn_method}_{dataset.node_count}n_{n_neighbours}nb.npy"
         knn_dist_path = f"{knns_dir}/knn_dist_{dataset_name}_{knn_method}_{dataset.node_count}n_{n_neighbours}nb.npy"
 
@@ -281,7 +282,7 @@ def node_graph_umap(
         box_size = math.ceil(math.sqrt(len(label_features)))
 
         figure, axarr = plt.subplots(
-            box_size, box_size, figsize=(35 * box_size, 35 * box_size)
+            box_size, box_size, figsize=(subplot_size * box_size, subplot_size * box_size)
         )
 
         for i, label_feature in enumerate(label_features):
@@ -303,7 +304,7 @@ def node_graph_umap(
             else:
                 raise ValueError(f"Unknown dataset name {dataset_name}")
             ax = umap.plot.points(
-                mapper, labels=labels, ax=axarr[i % box_size, i // box_size]
+                mapper, labels=labels, ax=axarr[i % box_size, i // box_size], theme="blue"
             )
             ax.title.set_text(
                 f"Label: {label_feature_name}, n_neighbours: {n_neighbours}"
@@ -311,6 +312,12 @@ def node_graph_umap(
             # plt.savefig(f"{plots_dir}/{name}_{label_feature_name}.png")
 
         figure.savefig(f"{plots_dir}/{name}.png")
+        
+        if plot_connections:
+            umap.plot.connectivity(mapper, show_points=True)
+            plt.savefig(f"{plots_dir}/{name}_connectivity.png")
+            umap.plot.connectivity(mapper, show_points=True, edge_bundling='hammer')
+            plt.savefig(f"{plots_dir}/{name}_connectivity_hammer.png")
 
         # print(f"Saving embeddings for {name}")
         # embeddings = reducer.transform(umap_data)

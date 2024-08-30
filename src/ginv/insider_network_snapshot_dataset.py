@@ -9,9 +9,9 @@ from osigma.onodes import OSpatialNodes
 
 
 class SnapshotAggregation(Enum):
-    CONNECTED_ONCE = 1
-    CONNECTED_HALF_DAYS = 2
-    CONNECTED_MORE_THAN_AVERAGE = 3
+    CONNECTED_ONCE = "once"
+    CONNECTED_HALF_DAYS = "half_days"
+    CONNECTED_MORE_THAN_AVERAGE = "more_than_average"
 
 
 def read(file_name: str, dtype):

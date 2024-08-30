@@ -737,6 +737,7 @@ def connectivity(
     background="white",
     width=800,
     height=800,
+    ax=None,
 ):
     """Plot connectivity relationships of the underlying UMAP
     simplicial set data structure. Internally UMAP will make
@@ -928,9 +929,10 @@ def connectivity(
 
     font_color = _select_font_color(background)
 
-    dpi = plt.rcParams["figure.dpi"]
-    fig = plt.figure(figsize=(width / dpi, height / dpi))
-    ax = fig.add_subplot(111)
+    if ax is None:
+        dpi = plt.rcParams["figure.dpi"]
+        fig = plt.figure(figsize=(width / dpi, height / dpi))
+        ax = fig.add_subplot(111)
 
     _embed_datashader_in_an_axis(result, ax)
 
