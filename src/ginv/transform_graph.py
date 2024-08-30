@@ -19,12 +19,12 @@ def transform_graph_for_umap_node_level(graph: OGraph, dtype=np.float32):
 def transform_graph_for_umap_connection_level(graph: OGraph, dtype=np.float32):
 
     result = np.empty(
-        [graph.connection_count, 1 + 2 * len(graph.nodes.features)], dtype=dtype
+        [graph.connection_count, 2 * len(graph.nodes.features)], dtype=dtype
     )
 
     for i in range(len(graph.nodes.features)):
-        result[:, 1 + i] = graph.nodes.features[i][graph.connections.froms]
-        result[:, 1 + len(graph.nodes.features) + i] = graph.nodes.features[i][
+        result[:, i] = graph.nodes.features[i][graph.connections.froms]
+        result[:, len(graph.nodes.features) + i] = graph.nodes.features[i][
             graph.connections.tos
         ]
 
@@ -43,7 +43,11 @@ def transform_connection_level_features_to_node_level_features(graph: OGraph, fe
 
 
 def transform_graph_for_umap_node_knn_simple(
-    graph: OGraph, neighbours_count: int, dtype=np.int32, epsilon=0.0001, knn_use_weights=True,
+    graph: OGraph,
+    neighbours_count: int,
+    dtype=np.int32,
+    epsilon=0.0001,
+    knn_use_weights=True,
 ):
 
     result = np.zeros([graph.node_count, neighbours_count], dtype=dtype)
@@ -189,7 +193,9 @@ def transform_graph_for_umap_node_knn_simple_full(
     return result, distances
 
 
-def transform_graph_into_a_csr_matrix(graph: OGraph, weight_to_distance_scale=1.0, epsilon=0.0001):
+def transform_graph_into_a_csr_matrix(
+    graph: OGraph, weight_to_distance_scale=1.0, epsilon=0.0001
+):
 
     row = graph.connections.froms
     col = graph.connections.tos
@@ -206,7 +212,7 @@ def transform_graph_for_umap_node_knn_multilevel(
     weight_to_distance_scale=1.0,
     dtype=np.int32,
     epsilon=0.0001,
-    use_weights=True
+    use_weights=True,
 ):
 
     result = np.zeros([graph.node_count, neighbours_count], dtype=dtype)
@@ -222,7 +228,9 @@ def transform_graph_for_umap_node_knn_multilevel(
     for i in range(graph.connection_count):
 
         if (i % 1000) == 0:
-            print(f"[1/2] Creating multilevel knn {i}/{graph.connection_count}", end="\r")
+            print(
+                f"[1/2] Creating multilevel knn {i}/{graph.connection_count}", end="\r"
+            )
 
         if use_weights:
             dist = weight_to_distance_scale / (graph.connections.values[i] + epsilon)
@@ -234,10 +242,14 @@ def transform_graph_for_umap_node_knn_multilevel(
             (graph.connections.tos[i], graph.connections.froms[i]),
         ]:
             if sizes[idx] < neighbours_count:
-                max_heap.push(other_idx, dist, result[idx], distances[idx], sizes[idx:idx+1])
+                max_heap.push(
+                    other_idx, dist, result[idx], distances[idx], sizes[idx : idx + 1]
+                )
             elif max_heap.top_value(distances[idx]) > dist:
-                max_heap.pop(result[idx], distances[idx], sizes[idx:idx+1])
-                max_heap.push(other_idx, dist, result[idx], distances[idx], sizes[idx:idx+1])
+                max_heap.pop(result[idx], distances[idx], sizes[idx : idx + 1])
+                max_heap.push(
+                    other_idx, dist, result[idx], distances[idx], sizes[idx : idx + 1]
+                )
 
     print()
     print(f"[2/2] Creating multilevel knn {graph.node_count}")
@@ -246,7 +258,7 @@ def transform_graph_for_umap_node_knn_multilevel(
 
         if (i % 1) == 0:
             print(f"[2/2] Creating multilevel knn {i}/{graph.node_count}", end="\r")
-        
+
         updated = True
 
         while updated:
@@ -279,20 +291,22 @@ def transform_graph_for_umap_node_knn_multilevel(
                 dist = second_level_distances[q]
 
                 if sizes[i] < neighbours_count:
-                    max_heap.push(neighbour, dist, result[i], distances[i], sizes[i:i+1])
+                    max_heap.push(
+                        neighbour, dist, result[i], distances[i], sizes[i : i + 1]
+                    )
                     updated = True
                 elif dist < max_heap.top_value(distances[i]):
-                    max_heap.pop(result[i], distances[i], sizes[i:i+1])
-                    max_heap.push(neighbour, dist, result[i], distances[i], sizes[i:i+1])
+                    max_heap.pop(result[i], distances[i], sizes[i : i + 1])
+                    max_heap.push(
+                        neighbour, dist, result[i], distances[i], sizes[i : i + 1]
+                    )
                     updated = True
-
 
     sort_ids = np.argsort(distances, axis=-1)
     result = np.take_along_axis(result, sort_ids, -1)
     distances = np.take_along_axis(distances, sort_ids, -1)
 
     return result, distances
-
 
 
 def reduce_knn(knn: np.ndarray, new_neighbours_count: int):

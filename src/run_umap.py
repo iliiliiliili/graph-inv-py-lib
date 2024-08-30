@@ -1,4 +1,6 @@
+import math
 from pathlib import Path
+import warnings
 import numpy as np
 import matplotlib.pyplot as plt
 from src import umap
@@ -7,7 +9,10 @@ from fire import Fire
 import os
 
 from ginv.istanbul_ein_dataset import IstanbulEinDataset
-from ginv.insider_network_snapshot_dataset import InsiderNetworkSnapshotDataset
+from ginv.insider_network_snapshot_dataset import (
+    InsiderNetworkSnapshotDataset,
+    SnapshotAggregation,
+)
 from ginv.transform_graph import (
     transform_graph_for_umap_node_level,
     transform_graph_for_umap_connection_level,
@@ -29,11 +34,16 @@ def save_embeddings(embeddings: np.ndarray, name):
         embeddings.T.tofile(f)
 
 
-def create_umap_data_and_labels_istanbul(dataset: IstanbulEinDataset, level="node"):
+def create_umap_data_istanbul(dataset: IstanbulEinDataset, level="node"):
     umap_data = {
         "node": transform_graph_for_umap_node_level,
         "connection": transform_graph_for_umap_connection_level,
     }[level](dataset)
+
+    return umap_data
+
+
+def create_umap_labels_istanbul(dataset: IstanbulEinDataset):
 
     labels = np.copy(dataset.node_profits)
     logs = np.log10(np.abs(labels))
@@ -42,19 +52,25 @@ def create_umap_data_and_labels_istanbul(dataset: IstanbulEinDataset, level="nod
     labels[positive_labels] = np.floor(logs[positive_labels])
     labels[~positive_labels] = -np.floor(logs[~positive_labels])
 
-    return umap_data, labels
+    return labels
 
 
-def create_umap_data_and_labels_insider_snapshot(
+def create_umap_data_insider_snapshot(
     dataset: InsiderNetworkSnapshotDataset,
     level="node",
-    label_feature=0,
 ):
     umap_data = {
         "node": transform_graph_for_umap_node_level,
         "connection": transform_graph_for_umap_connection_level,
     }[level](dataset)
 
+    return umap_data
+
+
+def create_umap_labels_insider_snapshot(
+    dataset: InsiderNetworkSnapshotDataset,
+    label_feature=0,
+):
     if isinstance(label_feature, int):
         label_feature = dataset.feature_files[label_feature]
 
@@ -81,7 +97,7 @@ def create_umap_data_and_labels_insider_snapshot(
     else:
         raise ValueError()
 
-    return umap_data, labels
+    return labels
 
 
 def node_graph_sparse_umap(
@@ -151,8 +167,9 @@ def node_graph_umap(
     save_and_load_knn=True,
     knns_dir="./data/knn",
     dataset_name="insider_snapshot",
-    insider_snapshot_day_id=0,
     label_features="all",
+    insider_snapshot_day_ids=[0, 0],
+    insider_snapshot_aggregation=SnapshotAggregation.CONNECTED_ONCE,
 ):
 
     plots_dir = Path(plots_dir) / "node_graph"
@@ -171,7 +188,9 @@ def node_graph_umap(
             label_features = [a.replace(".bin", "") for a in dataset.feature_files]
     elif dataset_name == "insider_snapshot":
         dataset = InsiderNetworkSnapshotDataset(
-            "./data/insider-network", insider_snapshot_day_id
+            "./data/insider-network",
+            insider_snapshot_day_ids,
+            aggregation=insider_snapshot_aggregation,
         )
 
         if label_features == "all":
@@ -189,81 +208,103 @@ def node_graph_umap(
 
     print("Creating umap_data")
 
-    for label_feature in label_features:
+    if dataset_name == "istanbul_ein":
+        umap_data = create_umap_data_istanbul(dataset)
+        knn_use_weights = True
+    elif dataset_name == "insider_snapshot":
+        umap_data = create_umap_data_insider_snapshot(dataset)
+        knn_use_weights = True
+    else:
+        raise ValueError(f"Unknown dataset name {dataset_name}")
 
-        label_feature_name = (
-            label_feature
-            if isinstance(label_feature, str)
-            else f"label_feature_{label_feature}"
-        )
+    knn_function = {
+        "simple": transform_graph_for_umap_node_knn_simple,
+        "simple_full": transform_graph_for_umap_node_knn_simple_full,
+        "multilevel": transform_graph_for_umap_node_knn_multilevel,
+    }[knn_method]
 
-        if dataset_name == "istanbul_ein":
-            umap_data, labels = create_umap_data_and_labels_istanbul(
-                dataset, label_feature=label_feature
-            )
-            knn_use_weights = True
-        elif dataset_name == "insider_snapshot":
-            umap_data, labels = create_umap_data_and_labels_insider_snapshot(
-                dataset, label_feature=label_feature
-            )
-            knn_use_weights = False
-        else:
-            raise ValueError(f"Unknown dataset name {dataset_name}")
+    knn = None
+    knn_distances = None
 
-        knn_function = {
-            "simple": transform_graph_for_umap_node_knn_simple,
-            "simple_full": transform_graph_for_umap_node_knn_simple_full,
-            "multilevel": transform_graph_for_umap_node_knn_multilevel,
-        }[knn_method]
+    all_n_neighbours.sort(reverse=True)
 
-        knn = None
-        knn_distances = None
+    name_suffix = ("_" + name_suffix) if len(name_suffix) > 0 else ""
 
-        all_n_neighbours.sort(reverse=True)
+    for n_neighbours in all_n_neighbours:
 
-        name_suffix = ("_" + name_suffix) if len(name_suffix) > 0 else ""
+        name = f"umap_{dataset_name}_{knn_method}_{dataset.node_count}n_{n_neighbours}nb{name_suffix}"
+        knn_path = f"{knns_dir}/knn_{dataset_name}_{knn_method}_{dataset.node_count}n_{n_neighbours}nb.npy"
+        knn_dist_path = f"{knns_dir}/knn_dist_{dataset_name}_{knn_method}_{dataset.node_count}n_{n_neighbours}nb.npy"
 
-        for n_neighbours in all_n_neighbours:
+        if knn is None:
 
-            name = f"umap_{dataset_name}_{knn_method}_{dataset.node_count}n_{n_neighbours}nb{name_suffix}_{label_feature_name}"
-            knn_path = f"{knns_dir}/knn_{dataset_name}_{knn_method}_{dataset.node_count}n_{n_neighbours}nb.npy"
-            knn_dist_path = f"{knns_dir}/knn_dist_{dataset_name}_{knn_method}_{dataset.node_count}n_{n_neighbours}nb.npy"
-
-            if knn is None:
-
-                if save_and_load_knn and os.path.exists(knn_path):
-                    knn, knn_distances = load_knn(knn_path, knn_dist_path)
-                    print("Loaded knn from file")
-                else:
-                    knn, knn_distances = knn_function(
-                        dataset, n_neighbours, use_weights=knn_use_weights
-                    )
-
-                    if save_and_load_knn:
-                        save_knn(knn, knn_distances, knn_path, knn_dist_path)
+            if save_and_load_knn and os.path.exists(knn_path):
+                knn, knn_distances = load_knn(knn_path, knn_dist_path)
+                print("Loaded knn from file")
             else:
-                knn = reduce_knn(knn, n_neighbours)
-                knn_distances = reduce_knn(knn_distances, n_neighbours)
+                knn, knn_distances = knn_function(
+                    dataset, n_neighbours, use_weights=knn_use_weights
+                )
 
                 if save_and_load_knn:
                     save_knn(knn, knn_distances, knn_path, knn_dist_path)
+        else:
+            knn = reduce_knn(knn, n_neighbours)
+            knn_distances = reduce_knn(knn_distances, n_neighbours)
 
-            print(f"Fitting umap for {name}")
+            if save_and_load_knn:
+                save_knn(knn, knn_distances, knn_path, knn_dist_path)
+
+        print(f"Fitting umap for {name}")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
             reducer = umap.UMAP(
                 n_neighbors=n_neighbours, precomputed_knn=(knn, knn_distances)
             )
+
             mapper = reducer.fit(umap_data)
 
-            print(f"Plotting for {name}")
-            umap.plot.points(mapper, labels=labels)
+        print(f"Plotting for {name}")
 
-            plt.savefig(f"{plots_dir}/{name}.png")
+        box_size = math.ceil(math.sqrt(len(label_features)))
 
-            # print(f"Saving embeddings for {name}")
-            # embeddings = reducer.transform(umap_data)
-            # save_embeddings(embeddings, f"{embeddings_dir}/embeddings_{name}", )
+        figure, axarr = plt.subplots(
+            box_size, box_size, figsize=(35 * box_size, 35 * box_size)
+        )
 
-            print()
+        for i, label_feature in enumerate(label_features):
+
+            label_feature_name = (
+                label_feature
+                if isinstance(label_feature, str)
+                else f"label_feature_{label_feature}"
+            )
+
+            if dataset_name == "istanbul_ein":
+                labels = create_umap_labels_istanbul(
+                    dataset, label_feature=label_feature
+                )
+            elif dataset_name == "insider_snapshot":
+                labels = create_umap_labels_insider_snapshot(
+                    dataset, label_feature=label_feature
+                )
+            else:
+                raise ValueError(f"Unknown dataset name {dataset_name}")
+            ax = umap.plot.points(
+                mapper, labels=labels, ax=axarr[i % box_size, i // box_size]
+            )
+            ax.title.set_text(
+                f"Label: {label_feature_name}, n_neighbours: {n_neighbours}"
+            )
+            # plt.savefig(f"{plots_dir}/{name}_{label_feature_name}.png")
+
+        figure.savefig(f"{plots_dir}/{name}.png")
+
+        # print(f"Saving embeddings for {name}")
+        # embeddings = reducer.transform(umap_data)
+        # save_embeddings(embeddings, f"{embeddings_dir}/embeddings_{name}", )
+
+        print()
 
 
 def node_umap(
@@ -273,7 +314,8 @@ def node_umap(
     all_n_neighbours=[128, 64, 32, 16, 8, 4],
     all_min_dist=[0.4, 0.2],
     dataset_name="insider_snapshot",
-    insider_snapshot_day_id=0,
+    insider_snapshot_day_ids=[0, 0],
+    insider_snapshot_aggregation=SnapshotAggregation.CONNECTED_ONCE,
 ):
 
     plots_dir = Path(plots_dir) / "node"
@@ -283,7 +325,9 @@ def node_umap(
         dataset = IstanbulEinDataset("./data/istanbul")
     elif dataset_name == "insider_snapshot":
         dataset = InsiderNetworkSnapshotDataset(
-            "./data/insider-network", insider_snapshot_day_id
+            "./data/insider-network",
+            insider_snapshot_day_ids,
+            aggregation=insider_snapshot_aggregation,
         )
     else:
         raise ValueError(f"Unknown dataset name {dataset_name}")
@@ -329,48 +373,91 @@ def node_umap(
 def connection_umap(
     node_count=0,
     plots_dir="./plots/umap",
+    embeddings_dir="./data/embeddings",
     all_n_neighbours=[16, 8, 4, 2],
     all_min_dist=[0.4, 0.2],
+    dataset_name="insider_snapshot",
+    insider_snapshot_day_id=0,
+    label_features="all",
 ):
 
-    os.makedirs(plots_dir, exist_ok=True)
+    plots_dir = Path(plots_dir) / "connection"
+    # embeddings_dir = Path(embeddings_dir) / "connection"
 
-    dataset = IstanbulEinDataset("./data/istanbul")
+    os.makedirs(plots_dir, exist_ok=True)
+    # os.makedirs(embeddings_dir, exist_ok=True)
+
+    if dataset_name == "istanbul_ein":
+        dataset = IstanbulEinDataset("./data/istanbul")
+
+        if label_features == "all":
+            label_features = [a.replace(".bin", "") for a in dataset.feature_files]
+    elif dataset_name == "insider_snapshot":
+        dataset = InsiderNetworkSnapshotDataset(
+            "./data/insider-network", insider_snapshot_day_id
+        )
+
+        if label_features == "all":
+            label_features = [a.replace(".bin", "") for a in dataset.feature_files]
+    else:
+        raise ValueError(f"Unknown dataset name {dataset_name}")
+
+    if not isinstance(label_features, list):
+        label_features = [label_features]
 
     if node_count > 0:
         print("Reducing the dataset")
         dataset.reduce(node_count)
         print(dataset)
 
-    print("Creating umap_data")
-    umap_data, labels = create_umap_data_and_labels_istanbul(dataset, "connection")
+    for label_feature in label_features:
 
-    for n_neighbours in all_n_neighbours:
-        for min_dist in all_min_dist:
+        label_feature_name = (
+            label_feature
+            if isinstance(label_feature, str)
+            else f"label_feature_{label_feature}"
+        )
 
-            name = f"umap_istanbul_connection_level_{dataset.node_count}n_{n_neighbours}nb_{str(min_dist).replace('.', '')}d"
-
-            print(f"Fitting umap for {name}")
-            reducer = umap.UMAP(
-                n_neighbors=n_neighbours,
-                min_dist=min_dist,
+        print("Creating umap_data")
+        if dataset_name == "istanbul_ein":
+            umap_data, labels = create_umap_data_and_labels_istanbul(
+                dataset, label_feature=label_feature, level="connection"
             )
-            mapper = reducer.fit(umap_data)
-            connection_features = mapper.transform(umap_data)
-            node_features = transform_connection_level_features_to_node_level_features(
-                dataset, connection_features
+        elif dataset_name == "insider_snapshot":
+            umap_data, labels = create_umap_data_and_labels_insider_snapshot(
+                dataset, label_feature=label_feature, level="connection"
             )
+        else:
+            raise ValueError(f"Unknown dataset name {dataset_name}")
 
-            print(f"Plotting for {name}")
-            plt.scatter(node_features[:, 0], node_features[:, 1], c=labels)
+        for n_neighbours in all_n_neighbours:
+            for min_dist in all_min_dist:
 
-            plt.savefig(f"{plots_dir}/{name}.png")
+                name = f"umap_{dataset.node_count}n_{n_neighbours}nb_{str(min_dist).replace('.', '')}d_{label_feature_name}"
 
-            # print(f"Saving embeddings for {name}")
-            # embeddings = reducer.transform(umap_data)
-            # np.save(f"{plots_dir}/embeddings_connection_level_{name}", embeddings)
+                print(f"Fitting umap for {name}")
+                reducer = umap.UMAP(
+                    n_neighbors=n_neighbours,
+                    min_dist=min_dist,
+                )
+                mapper = reducer.fit(umap_data)
+                connection_features = mapper.transform(umap_data)
+                node_features = (
+                    transform_connection_level_features_to_node_level_features(
+                        dataset, connection_features
+                    )
+                )
 
-            print()
+                print(f"Plotting for {name}")
+                plt.scatter(node_features[:, 0], node_features[:, 1], c=labels)
+
+                plt.savefig(f"{plots_dir}/{name}.png")
+
+                # print(f"Saving embeddings for {name}")
+                # embeddings = reducer.transform(umap_data)
+                # np.save(f"{plots_dir}/embeddings_connection_level_{name}", embeddings)
+
+                print()
 
 
 if __name__ == "__main__":

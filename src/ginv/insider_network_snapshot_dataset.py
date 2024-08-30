@@ -1,10 +1,17 @@
 from typing import List
 import numpy as np
 import json
+from enum import Enum
 
 from osigma.oconnections import OSpatialConnections
 from osigma.ograph import OGraph
 from osigma.onodes import OSpatialNodes
+
+
+class SnapshotAggregation(Enum):
+    CONNECTED_ONCE = 1
+    CONNECTED_HALF_DAYS = 2
+    CONNECTED_MORE_THAN_AVERAGE = 3
 
 
 def read(file_name: str, dtype):
@@ -19,12 +26,15 @@ class InsiderNetworkSnapshotDataset(OGraph):
     def __init__(
         self,
         root: str,
-        day_id: int,
+        day_ids: int | List[int],
         dtypes: dict | None = None,
         feature_files: List[str] | None = None,
+        aggregation: SnapshotAggregation = SnapshotAggregation.CONNECTED_ONCE,
     ) -> None:
         super().__init__(
-            OSpatialNodes(None, None, None, [None, None, None, None, None, None, None, None, None]),
+            OSpatialNodes(
+                None, None, None, [None, None, None, None, None, None, None, None, None]
+            ),
             OSpatialConnections(None, None, None, None, None, None, []),
         )
 
@@ -77,8 +87,9 @@ class InsiderNetworkSnapshotDataset(OGraph):
         )
 
         self.root = root
-        self.day_id = day_id
-        self.__load_dataset(root, day_id)
+        self.day_ids = (day_ids,)
+        self.aggregation = aggregation
+        self.__load_dataset(root, day_ids, aggregation)
 
     def reduce(self, node_count):
 
@@ -166,9 +177,9 @@ class InsiderNetworkSnapshotDataset(OGraph):
     def node_language(self):
         return self.nodes.features[8]
 
-    def __load_dataset(self, root: str, day_id: int):
+    def __load_dataset(self, root: str, day_ids: int | List[int], aggregation: SnapshotAggregation):
 
-        self.__load_connections(root, day_id)
+        self.__load_connections(root, day_ids, aggregation)
         self.__load_features(root)
 
         node_count = len(self.nodes.features[0])
@@ -197,25 +208,92 @@ class InsiderNetworkSnapshotDataset(OGraph):
     def __load_connections(
         self,
         root,
-        day_id: str,
+        day_ids: int | List[int],
+        aggregation: SnapshotAggregation,
         from_name: str = "graph/froms_${DAY_ID}.bin",
         to_name: str = "graph/tos_${DAY_ID}.bin",
         value_name: str = None,
     ):
-        self.connections.froms = read(
-            root + "/" + from_name.replace("${DAY_ID}", str(day_id)),
-            self.dtypes["connections"]["froms"],
-        )
-        self.connections.tos = read(
-            root + "/" + to_name.replace("${DAY_ID}", str(day_id)),
-            self.dtypes["connections"]["tos"],
-        )
 
-        if value_name is not None:
-            self.connections.values = read(
-                root + "/" + value_name.replace("${DAY_ID}", str(day_id)),
-                self.dtypes["connections"]["values"],
+        all_froms = []
+        all_tos = []
+        all_values = []
+
+        for day_id in day_ids:
+
+            froms = read(
+                root + "/" + from_name.replace("${DAY_ID}", str(day_id)),
+                self.dtypes["connections"]["froms"],
             )
+            tos = read(
+                root + "/" + to_name.replace("${DAY_ID}", str(day_id)),
+                self.dtypes["connections"]["tos"],
+            )
+
+            if value_name is not None:
+                values = read(
+                    root + "/" + value_name.replace("${DAY_ID}", str(day_id)),
+                    self.dtypes["connections"]["values"],
+                )
+            else:
+                values = np.ones_like(froms, dtype=self.dtypes["connections"]["values"])
+
+            all_froms.append(froms)
+            all_tos.append(tos)
+            all_values.append(values)
+
+        if len(all_froms) == 1:
+            combined_froms = all_froms[0]
+            combined_tos = all_tos[0]
+            combined_values = all_values[0]
+        else:
+
+            found_connections = {}
+
+            for day in range(len(day_ids)):
+                for i in range(len(all_froms[day])):
+                    f = all_froms[day][i]
+                    t = all_tos[day][i]
+
+                    if f > t:
+                        f, t = t, f
+
+                    v = all_values[day][i]
+
+                    if (f, t) in found_connections or (t, f) in found_connections:
+                        found_connections[(f, t)][0] += v
+                        found_connections[(f, t)][1] += 1
+                    else:
+                        found_connections[(f, t)] = [v, 1]
+
+            if aggregation == SnapshotAggregation.CONNECTED_ONCE:
+
+                total_connections = len(found_connections)
+
+                combined_froms = np.empty(
+                    [total_connections], dtype=self.dtypes["connections"]["froms"]
+                )
+                combined_tos = np.empty(
+                    [total_connections], dtype=self.dtypes["connections"]["tos"]
+                )
+                combined_values = np.empty(
+                    [total_connections], dtype=self.dtypes["connections"]["values"]
+                )
+
+                for i, (k, v) in enumerate(found_connections.items()):
+                    weight = v[0] / v[1]
+                    f, t = k
+
+                    combined_froms[i] = f
+                    combined_tos[i] = t
+                    combined_values[i] = weight
+
+            else:
+                raise NotImplementedError()
+
+        self.connections.froms = combined_froms
+        self.connections.tos = combined_tos
+        self.connections.values = combined_values
 
     def __load_features(self, root: str):
 
