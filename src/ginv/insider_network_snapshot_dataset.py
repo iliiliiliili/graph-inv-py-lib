@@ -251,20 +251,28 @@ class InsiderNetworkSnapshotDataset(OGraph):
             found_connections = {}
 
             for day in range(len(day_ids)):
+                day_connections = set()
+
                 for i in range(len(all_froms[day])):
+
+
                     f = all_froms[day][i]
                     t = all_tos[day][i]
 
                     if f > t:
                         f, t = t, f
 
+                    if (f, t) in day_connections:
+                        continue
+
                     v = all_values[day][i]
 
-                    if (f, t) in found_connections or (t, f) in found_connections:
+                    if (f, t) in found_connections:
                         found_connections[(f, t)][0] += v
                         found_connections[(f, t)][1] += 1
                     else:
                         found_connections[(f, t)] = [v, 1]
+                        day_connections.add((f, t))
 
             if aggregation == SnapshotAggregation.CONNECTED_ONCE:
 
@@ -281,13 +289,13 @@ class InsiderNetworkSnapshotDataset(OGraph):
                 )
 
                 for i, (k, v) in enumerate(found_connections.items()):
-                    weight = v[0] / v[1]
+                    weight = v[0]
                     f, t = k
 
                     combined_froms[i] = f
                     combined_tos[i] = t
                     combined_values[i] = weight
-
+                
             else:
                 raise NotImplementedError()
 

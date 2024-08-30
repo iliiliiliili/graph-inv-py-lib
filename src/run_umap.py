@@ -27,6 +27,15 @@ from ginv.transform_graph import (
 )
 
 
+def parse_insider_days(days):
+
+    if isinstance(days, list):
+        if len(days) == 2:
+            return list(range(days[0], days[1] + 1))
+    
+    return days
+
+
 def save_embeddings(embeddings: np.ndarray, name):
     np.save(f"{name}.npy", embeddings)
 
@@ -168,7 +177,7 @@ def node_graph_umap(
     knns_dir="./data/knn",
     dataset_name="insider_snapshot",
     label_features="all",
-    insider_snapshot_day_ids=[0, 0],
+    insider_snapshot_day_ids=[0, 0, 0],
     insider_snapshot_aggregation=SnapshotAggregation.CONNECTED_ONCE,
 ):
 
@@ -187,6 +196,9 @@ def node_graph_umap(
         if label_features == "all":
             label_features = [a.replace(".bin", "") for a in dataset.feature_files]
     elif dataset_name == "insider_snapshot":
+
+        insider_snapshot_day_ids = parse_insider_days(insider_snapshot_day_ids)
+
         dataset = InsiderNetworkSnapshotDataset(
             "./data/insider-network",
             insider_snapshot_day_ids,
