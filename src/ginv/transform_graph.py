@@ -16,7 +16,10 @@ def transform_graph_for_umap_node_level(graph: OGraph, dtype=np.float32, normali
     result = np.empty([graph.node_count, len(graph.nodes.features)], dtype=dtype)
 
     for i in range(len(graph.nodes.features)):
-        result[:, i] = normalize_array(graph.nodes.features[i].astype(dtype))
+        if normalize:
+            result[:, i] = normalize_array(graph.nodes.features[i].astype(dtype))
+        else:
+            result[:, i] = graph.nodes.features[i]
 
     return result
 
