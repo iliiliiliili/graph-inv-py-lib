@@ -32,7 +32,7 @@ def parse_insider_days(days):
     if isinstance(days, list):
         if len(days) == 2:
             return list(range(days[0], days[1] + 1))
-    
+
     return days
 
 
@@ -67,11 +67,12 @@ def create_umap_labels_istanbul(dataset: IstanbulEinDataset):
 def create_umap_data_insider_snapshot(
     dataset: InsiderNetworkSnapshotDataset,
     level="node",
+    normalize=True,
 ):
     umap_data = {
         "node": transform_graph_for_umap_node_level,
         "connection": transform_graph_for_umap_connection_level,
-    }[level](dataset)
+    }[level](dataset, normalize=normalize)
 
     return umap_data
 
@@ -181,10 +182,11 @@ def node_graph_umap(
     insider_snapshot_aggregation=SnapshotAggregation.CONNECTED_ONCE,
     plot_connections=True,
     subplot_size=25,
+    normalize_data=True,
 ):
 
-    plots_dir = Path(plots_dir) / "node_graph"
-    embeddings_dir = Path(embeddings_dir) / "node_graph"
+    plots_dir = Path(plots_dir) / f"node_graph{'_n' if normalize_data else ''}"
+    embeddings_dir = Path(embeddings_dir) / f"node_graph{'_n' if normalize_data else ''}"
 
     os.makedirs(plots_dir, exist_ok=True)
     os.makedirs(embeddings_dir, exist_ok=True)
@@ -207,7 +209,11 @@ def node_graph_umap(
         )
         if label_features == "all":
             label_features = [a.replace(".bin", "") for a in dataset.feature_files]
-        extra_name = f"_{len(insider_snapshot_day_ids)}_days_agg_{insider_snapshot_aggregation.value}"
+        extra_name = (
+            f"_{len(insider_snapshot_day_ids)}_days"
+            + ("" if insider_snapshot_day_ids[0] == 0 else f"_from_{insider_snapshot_day_ids[0]}")
+            + f"_agg_{insider_snapshot_aggregation.value}"
+        )
     else:
         raise ValueError(f"Unknown dataset name {dataset_name}")
 
@@ -222,10 +228,10 @@ def node_graph_umap(
     print("Creating umap_data")
 
     if dataset_name == "istanbul_ein":
-        umap_data = create_umap_data_istanbul(dataset)
+        umap_data = create_umap_data_istanbul(dataset, normalize=normalize_data)
         knn_use_weights = True
     elif dataset_name == "insider_snapshot":
-        umap_data = create_umap_data_insider_snapshot(dataset)
+        umap_data = create_umap_data_insider_snapshot(dataset, normalize=normalize_data)
         knn_use_weights = True
     else:
         raise ValueError(f"Unknown dataset name {dataset_name}")
@@ -282,7 +288,9 @@ def node_graph_umap(
         box_size = math.ceil(math.sqrt(len(label_features)))
 
         figure, axarr = plt.subplots(
-            box_size, box_size, figsize=(subplot_size * box_size, subplot_size * box_size)
+            box_size,
+            box_size,
+            figsize=(subplot_size * box_size, subplot_size * box_size),
         )
 
         for i, label_feature in enumerate(label_features):
@@ -304,7 +312,10 @@ def node_graph_umap(
             else:
                 raise ValueError(f"Unknown dataset name {dataset_name}")
             ax = umap.plot.points(
-                mapper, labels=labels, ax=axarr[i % box_size, i // box_size], theme="blue"
+                mapper,
+                labels=labels,
+                ax=axarr[i % box_size, i // box_size],
+                theme="blue",
             )
             ax.title.set_text(
                 f"Label: {label_feature_name}, n_neighbours: {n_neighbours}"
@@ -312,11 +323,24 @@ def node_graph_umap(
             # plt.savefig(f"{plots_dir}/{name}_{label_feature_name}.png")
 
         figure.savefig(f"{plots_dir}/{name}.png")
-        
+
         if plot_connections:
-            umap.plot.connectivity(mapper, show_points=True)
+            umap.plot.connectivity(
+                mapper,
+                show_points=True,
+                labels=labels,
+                width=subplot_size * 100,
+                height=subplot_size * 100,
+            )
             plt.savefig(f"{plots_dir}/{name}_connectivity.png")
-            umap.plot.connectivity(mapper, show_points=True, edge_bundling='hammer')
+            umap.plot.connectivity(
+                mapper,
+                show_points=True,
+                labels=labels,
+                width=subplot_size * 100,
+                height=subplot_size * 100,
+                edge_bundling="hammer",
+            )
             plt.savefig(f"{plots_dir}/{name}_connectivity_hammer.png")
 
         # print(f"Saving embeddings for {name}")

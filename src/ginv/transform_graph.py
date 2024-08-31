@@ -5,13 +5,18 @@ from scipy.sparse import csr_matrix
 from ginv.max_heap import MaxHeap
 from osigma.ograph import OGraph
 
+def normalize_array(a: np.ndarray):
+    a_min = a.min()
+    a_max = a.max()
+    
+    return (a - a_min) / (a_max - a_min)
 
-def transform_graph_for_umap_node_level(graph: OGraph, dtype=np.float32):
+def transform_graph_for_umap_node_level(graph: OGraph, dtype=np.float32, normalize=True):
 
     result = np.empty([graph.node_count, len(graph.nodes.features)], dtype=dtype)
 
     for i in range(len(graph.nodes.features)):
-        result[:, i] = graph.nodes.features[i]
+        result[:, i] = normalize_array(graph.nodes.features[i].astype(dtype))
 
     return result
 
