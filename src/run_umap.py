@@ -180,9 +180,10 @@ def node_graph_umap(
     label_features="all",
     insider_snapshot_day_ids=[0, 10],
     insider_snapshot_aggregation=SnapshotAggregation.CONNECTED_ONCE,
-    plot_connections=True,
-    subplot_size=25,
     normalize_data=True,
+    plot_connections=True,
+    plot_connections_hammer=True,
+    subplot_size=25,
 ):
 
     insider_snapshot_aggregation = SnapshotAggregation(insider_snapshot_aggregation)
@@ -351,6 +352,8 @@ def node_graph_umap(
                 height=subplot_size * 100,
             )
             plt.savefig(f"{plots_dir}/{name}_connectivity.png")
+
+        if plot_connections_hammer:
             umap.plot.connectivity(
                 mapper,
                 show_points=True,
