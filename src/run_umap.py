@@ -185,16 +185,20 @@ def node_graph_umap(
     normalize_data=True,
 ):
 
-    plots_dir = Path(plots_dir) / f"node_graph{'_n' if normalize_data else ''}"
-    embeddings_dir = Path(embeddings_dir) / f"node_graph{'_n' if normalize_data else ''}"
+    insider_snapshot_aggregation = SnapshotAggregation(insider_snapshot_aggregation)
 
-    os.makedirs(plots_dir, exist_ok=True)
-    os.makedirs(embeddings_dir, exist_ok=True)
-
-    if save_and_load_knn:
-        os.makedirs(knns_dir, exist_ok=True)
-
-    extra_name = ""
+    plots_dir = (
+        Path(plots_dir)
+        / f"node_graph{'_n' if normalize_data else ''}"
+        / dataset_name
+        / knn_method
+    )
+    embeddings_dir = (
+        Path(embeddings_dir)
+        / f"node_graph{'_n' if normalize_data else ''}"
+        / dataset_name
+        / knn_method
+    )
 
     if dataset_name == "istanbul_ein":
         dataset = IstanbulEinDataset("./data/istanbul")
@@ -209,13 +213,27 @@ def node_graph_umap(
         )
         if label_features == "all":
             label_features = [a.replace(".bin", "") for a in dataset.feature_files]
-        extra_name = (
-            f"_{len(insider_snapshot_day_ids)}_days"
-            + ("" if insider_snapshot_day_ids[0] == 0 else f"_from_{insider_snapshot_day_ids[0]}")
+        extra_path = (
+            f"{len(insider_snapshot_day_ids)}_days"
+            + (
+                ""
+                if insider_snapshot_day_ids[0] == 0
+                else f"_from_{insider_snapshot_day_ids[0]}"
+            )
             + f"_agg_{insider_snapshot_aggregation.value}"
         )
+
+        plots_dir /= extra_path
+        embeddings_dir /= extra_path
+
     else:
         raise ValueError(f"Unknown dataset name {dataset_name}")
+
+    os.makedirs(plots_dir, exist_ok=True)
+    os.makedirs(embeddings_dir, exist_ok=True)
+
+    if save_and_load_knn:
+        os.makedirs(knns_dir, exist_ok=True)
 
     if not isinstance(label_features, list):
         label_features = [label_features]
@@ -251,7 +269,7 @@ def node_graph_umap(
 
     for n_neighbours in all_n_neighbours:
 
-        name = f"umap_{dataset_name}_{knn_method}_{dataset.node_count}n_{n_neighbours}nb{name_suffix}{extra_name}"
+        name = f"umap_{dataset.node_count}n_{n_neighbours}nb{name_suffix}"
         knn_path = f"{knns_dir}/knn_{dataset_name}_{knn_method}_{dataset.node_count}n_{n_neighbours}nb.npy"
         knn_dist_path = f"{knns_dir}/knn_dist_{dataset_name}_{knn_method}_{dataset.node_count}n_{n_neighbours}nb.npy"
 
