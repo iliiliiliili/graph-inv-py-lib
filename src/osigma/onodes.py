@@ -34,7 +34,21 @@ class OSpatialNodes(ONodes):
         self.z_index = z_index
         super().__init__(features)
 
+    def copy(self):
+        result = OSpatialNodes(
+            x_coordinates=self.x_coordinates.copy(),
+            y_coordinates=self.y_coordinates.copy(),
+            z_index=self.z_index.copy(),
+            features=[a.copy() for a in self.features],
+        )
+
+        return result
+
     def __repr__(self) -> str:
+
+        if self.x_coordinates is None:
+            return "Not specified nodes"
+
         return (
             "OSpatialNodes(x, y + "
             + str(len(self.features))

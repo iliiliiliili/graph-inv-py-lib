@@ -5,21 +5,44 @@ from scipy.sparse import csr_matrix
 from ginv.max_heap import MaxHeap
 from osigma.ograph import OGraph
 
+
 def normalize_array(a: np.ndarray):
     a_min = a.min()
     a_max = a.max()
-    
+
     return (a - a_min) / (a_max - a_min)
 
-def transform_graph_for_umap_node_level(graph: OGraph, dtype=np.float32, normalize=True):
 
-    result = np.empty([graph.node_count, len(graph.nodes.features)], dtype=dtype)
+def transform_graph_for_umap_node_level(
+    graph: OGraph, dtype=np.float32, normalize_single_dim=True
+):
 
-    for i in range(len(graph.nodes.features)):
-        if normalize:
-            result[:, i] = normalize_array(graph.nodes.features[i].astype(dtype))
+    total_feature_dimensions = sum(
+        [(a.shape[1] if len(a.shape) > 1 else 1) for a in graph.nodes.features]
+    )
+
+    result = np.empty([graph.node_count, total_feature_dimensions], dtype=dtype)
+
+    i = 0
+
+    while i < total_feature_dimensions:
+
+        dims = (
+            graph.nodes.features[i].shape[1]
+            if len(graph.nodes.features[i].shape) > 1
+            else 1
+        )
+
+        if normalize_single_dim:
+
+            feature = graph.nodes.features[i].reshape(-1, dims).astype(dtype)
+            if dims <= 1:
+                feature = normalize_array(feature)
+            result[:, i : i + dims] = feature
         else:
-            result[:, i] = graph.nodes.features[i]
+            result[:, i : i + dims] = graph.nodes.features[i].reshape(-1, dims)
+
+        i += dims
 
     return result
 

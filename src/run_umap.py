@@ -72,7 +72,7 @@ def create_umap_data_insider_snapshot(
     umap_data = {
         "node": transform_graph_for_umap_node_level,
         "connection": transform_graph_for_umap_connection_level,
-    }[level](dataset, normalize=normalize)
+    }[level](dataset, normalize_single_dim=normalize)
 
     return umap_data
 
@@ -184,6 +184,7 @@ def node_graph_umap(
     plot_connections=True,
     plot_connections_hammer=True,
     subplot_size=25,
+    dataset=None
 ):
 
     insider_snapshot_aggregation = SnapshotAggregation(insider_snapshot_aggregation)
@@ -202,16 +203,18 @@ def node_graph_umap(
     )
 
     if dataset_name == "istanbul_ein":
-        dataset = IstanbulEinDataset("./data/istanbul")
+        if dataset is None:
+            dataset = IstanbulEinDataset("./data/istanbul")
         if label_features == "all":
             label_features = [a.replace(".bin", "") for a in dataset.feature_files]
     elif dataset_name == "insider_snapshot":
         insider_snapshot_day_ids = parse_insider_days(insider_snapshot_day_ids)
-        dataset = InsiderNetworkSnapshotDataset(
-            "./data/insider-network",
-            insider_snapshot_day_ids,
-            aggregation=insider_snapshot_aggregation,
-        )
+        if dataset is None:
+            dataset = InsiderNetworkSnapshotDataset(
+                "./data/insider-network",
+                insider_snapshot_day_ids,
+                aggregation=insider_snapshot_aggregation,
+            )
         if label_features == "all":
             label_features = [a.replace(".bin", "") for a in dataset.feature_files]
         extra_path = (
@@ -302,7 +305,7 @@ def node_graph_umap(
 
             mapper = reducer.fit(umap_data)
 
-        print(f"Plotting for {name}")
+        print(f"Plotting for {plots_dir}/{name}")
 
         box_size = math.ceil(math.sqrt(len(label_features)))
 

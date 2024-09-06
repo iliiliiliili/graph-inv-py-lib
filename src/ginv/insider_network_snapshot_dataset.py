@@ -2,6 +2,7 @@ from typing import List
 import numpy as np
 import json
 from enum import Enum
+import networkx as nx
 
 from osigma.oconnections import OSpatialConnections
 from osigma.ograph import OGraph
@@ -11,6 +12,7 @@ from osigma.onodes import OSpatialNodes
 class SnapshotAggregation(Enum):
     CONNECTED_ONCE = "once"
     CONNECTED_HALF_DAYS = "half_days"
+    CONNECTED_MOST_DAYS = "most_days"
     CONNECTED_MORE_THAN_AVERAGE = "more_than_average"
 
 
@@ -26,10 +28,11 @@ class InsiderNetworkSnapshotDataset(OGraph):
     def __init__(
         self,
         root: str,
-        day_ids: int | List[int],
+        day_ids: int | List[int] | None,
         dtypes: dict | None = None,
         feature_files: List[str] | None = None,
         aggregation: SnapshotAggregation = SnapshotAggregation.CONNECTED_ONCE,
+        load_nodes=True,
     ) -> None:
         super().__init__(
             OSpatialNodes(
@@ -87,9 +90,12 @@ class InsiderNetworkSnapshotDataset(OGraph):
         )
 
         self.root = root
-        self.day_ids = (day_ids,)
+        self.day_ids = day_ids
         self.aggregation = aggregation
-        self.__load_dataset(root, day_ids, aggregation)
+        self.load_nodes = load_nodes
+
+        if day_ids is not None:
+            self.__load_dataset(root, day_ids, aggregation, load_nodes)
 
     def reduce(self, node_count):
 
@@ -141,6 +147,14 @@ class InsiderNetworkSnapshotDataset(OGraph):
                 subset_graph_connections_start:subset_graph_connections_end
             ]
 
+    def take_nodes(self, node_list):
+        self.nodes.x_coordinates = self.nodes.x_coordinates.take(node_list)
+        self.nodes.y_coordinates = self.nodes.y_coordinates.take(node_list)
+        self.nodes.z_index = self.nodes.z_index.take(node_list)
+
+        for i in range(len(self.nodes.features)):
+            self.nodes.features[i] = self.nodes.features[i].take(node_list)
+
     @property
     def node_year_of_birth(self):
         return self.nodes.features[0]
@@ -177,23 +191,135 @@ class InsiderNetworkSnapshotDataset(OGraph):
     def node_language(self):
         return self.nodes.features[8]
 
-    def __load_dataset(self, root: str, day_ids: int | List[int], aggregation: SnapshotAggregation):
+    @property
+    def node_extra_features(self):
+        return self.nodes.features[9]
+
+    @staticmethod
+    def aggregate_connections(all_froms: List[int], all_tos: List[int], all_values: List[int], aggregation: SnapshotAggregation, froms_dtype, tos_dtype, values_dtype):
+        
+        if len(all_froms) == 1:
+            combined_froms = all_froms[0]
+            combined_tos = all_tos[0]
+            combined_values = all_values[0]
+        else:
+
+            found_connections = {}
+
+            for day in range(len(all_froms)):
+                day_connections = set()
+
+                for i in range(len(all_froms[day])):
+
+                    f = all_froms[day][i]
+                    t = all_tos[day][i]
+
+                    if f > t:
+                        f, t = t, f
+
+                    if (f, t) in day_connections:
+                        continue
+
+                    v = all_values[day][i]
+
+                    if (f, t) in found_connections:
+                        found_connections[(f, t)][0] += v
+                        found_connections[(f, t)][1] += 1
+                    else:
+                        found_connections[(f, t)] = [v, 1]
+                        day_connections.add((f, t))
+
+            if aggregation in [
+                SnapshotAggregation.CONNECTED_ONCE,
+                SnapshotAggregation.CONNECTED_HALF_DAYS,
+                SnapshotAggregation.CONNECTED_MOST_DAYS,
+            ]:
+
+                days_limit = 1
+
+                if aggregation == SnapshotAggregation.CONNECTED_HALF_DAYS:
+                    days_limit = len(all_froms) // 2
+                elif aggregation == SnapshotAggregation.CONNECTED_MOST_DAYS:
+                    days_limit = (len(all_froms) * 3) // 4
+
+                initial_connections_count = len(found_connections)
+
+                found_connections = {
+                    k: v for k, v in found_connections.items() if v[1] >= days_limit
+                }
+
+                connections_count = len(found_connections)
+
+                if connections_count != initial_connections_count:
+                    print(
+                        f"Aggregated graph to have {connections_count} connections instead of {initial_connections_count}"
+                    )
+
+                combined_froms = np.empty(
+                    [connections_count], dtype=froms_dtype
+                )
+                combined_tos = np.empty(
+                    [connections_count], dtype=tos_dtype
+                )
+                combined_values = np.empty(
+                    [connections_count], dtype=values_dtype
+                )
+
+                for i, (k, v) in enumerate(found_connections.items()):
+                    weight = v[0]
+                    f, t = k
+
+                    combined_froms[i] = f
+                    combined_tos[i] = t
+                    combined_values[i] = weight
+
+            else:
+                raise NotImplementedError()
+        
+        return combined_froms, combined_tos, combined_values
+
+    def connections_to_networkx(self, nodes: List[int], prune=True):
+
+        graph = nx.Graph()
+
+        if not prune:
+            for node in nodes:
+                graph.add_node(str(node))
+
+        for f, t in zip(self.connections.froms, self.connections.tos):
+            graph.add_edge(str(f), str(t))
+
+        if prune:
+            graph.remove_edges_from(nx.selfloop_edges(graph))
+            graph.remove_nodes_from(list(nx.isolates(graph)))
+
+        return graph
+
+    def __load_dataset(
+        self,
+        root: str,
+        day_ids: int | List[int],
+        aggregation: SnapshotAggregation,
+        load_nodes=True,
+    ):
 
         self.__load_connections(root, day_ids, aggregation)
-        self.__load_features(root)
 
-        node_count = len(self.nodes.features[0])
+        if load_nodes:
+            self.__load_features(root)
+            node_count = len(self.nodes.features[0])
+
+            self.nodes.x_coordinates = np.ndarray(
+                [node_count], dtype=self.dtypes["nodes"]["x_coordinates"]
+            )
+            self.nodes.y_coordinates = np.ndarray(
+                [node_count], dtype=self.dtypes["nodes"]["y_coordinates"]
+            )
+            self.nodes.z_index = np.ndarray(
+                [node_count], dtype=self.dtypes["nodes"]["z_index"]
+            )
+
         connection_count = self.connection_count
-
-        self.nodes.x_coordinates = np.ndarray(
-            [node_count], dtype=self.dtypes["nodes"]["x_coordinates"]
-        )
-        self.nodes.y_coordinates = np.ndarray(
-            [node_count], dtype=self.dtypes["nodes"]["y_coordinates"]
-        )
-        self.nodes.z_index = np.ndarray(
-            [node_count], dtype=self.dtypes["nodes"]["z_index"]
-        )
 
         self.connections.x_coordinates = np.ndarray(
             [connection_count], dtype=self.dtypes["connections"]["x_coordinates"]
@@ -212,12 +338,15 @@ class InsiderNetworkSnapshotDataset(OGraph):
         aggregation: SnapshotAggregation,
         from_name: str = "graph/froms_${DAY_ID}.bin",
         to_name: str = "graph/tos_${DAY_ID}.bin",
-        value_name: str = None,
+        value_name: str | None = None,
     ):
 
         all_froms = []
         all_tos = []
         all_values = []
+
+        if not isinstance(day_ids, list):
+            day_ids = [day_ids]
 
         for day_id in day_ids:
 
@@ -242,62 +371,8 @@ class InsiderNetworkSnapshotDataset(OGraph):
             all_tos.append(tos)
             all_values.append(values)
 
-        if len(all_froms) == 1:
-            combined_froms = all_froms[0]
-            combined_tos = all_tos[0]
-            combined_values = all_values[0]
-        else:
+        combined_froms, combined_tos, combined_values = self.aggregate_connections(all_froms, all_tos, all_values, aggregation, self.dtypes["connections"]["froms"], self.dtypes["connections"]["tos"], self.dtypes["connections"]["values"])
 
-            found_connections = {}
-
-            for day in range(len(day_ids)):
-                day_connections = set()
-
-                for i in range(len(all_froms[day])):
-
-
-                    f = all_froms[day][i]
-                    t = all_tos[day][i]
-
-                    if f > t:
-                        f, t = t, f
-
-                    if (f, t) in day_connections:
-                        continue
-
-                    v = all_values[day][i]
-
-                    if (f, t) in found_connections:
-                        found_connections[(f, t)][0] += v
-                        found_connections[(f, t)][1] += 1
-                    else:
-                        found_connections[(f, t)] = [v, 1]
-                        day_connections.add((f, t))
-
-            if aggregation == SnapshotAggregation.CONNECTED_ONCE:
-
-                total_connections = len(found_connections)
-
-                combined_froms = np.empty(
-                    [total_connections], dtype=self.dtypes["connections"]["froms"]
-                )
-                combined_tos = np.empty(
-                    [total_connections], dtype=self.dtypes["connections"]["tos"]
-                )
-                combined_values = np.empty(
-                    [total_connections], dtype=self.dtypes["connections"]["values"]
-                )
-
-                for i, (k, v) in enumerate(found_connections.items()):
-                    weight = v[0]
-                    f, t = k
-
-                    combined_froms[i] = f
-                    combined_tos[i] = t
-                    combined_values[i] = weight
-                
-            else:
-                raise NotImplementedError()
 
         self.connections.froms = combined_froms
         self.connections.tos = combined_tos
