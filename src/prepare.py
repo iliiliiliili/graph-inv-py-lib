@@ -9,7 +9,7 @@ from run_umap import parse_insider_days
 
 def prepare_insiders_for_glodyne(
     days: List[int] = [0, 501],
-    save_path = "./data/prepared/insider-network.pkl",
+    save_path = "./data/prepared/insider_network.pkl",
     dataset_path = "./data/insider-network",
     prune=True,
 ):

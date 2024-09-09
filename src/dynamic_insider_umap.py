@@ -9,13 +9,14 @@ from run_umap import parse_insider_days, node_graph_umap
 
 def node_graph_umap_with_extra_embeddings(
     days: List[int] = [0, 501],
-    snapshot_days: List[int] = [0, 10],
+    snapshot_days: List[int] = [0, 501],
     snapshot_aggregation: SnapshotAggregation = SnapshotAggregation.CONNECTED_ONCE,
     extra_feature_aggregation: ExtraFeaturesAggregation = ExtraFeaturesAggregation.MEAN,
     embeddings_path="../GloDyNE/output/insider_DynWalks.pkl",
     dataset_path="./data/insider-network",
 ):
     snapshot_aggregation = SnapshotAggregation(snapshot_aggregation)
+    extra_feature_aggregation = ExtraFeaturesAggregation(extra_feature_aggregation)
 
     days = parse_insider_days(days)
 
