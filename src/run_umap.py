@@ -1,12 +1,16 @@
+import os
 import math
-from pathlib import Path
+from typing import Any
 import warnings
 import numpy as np
 import matplotlib.pyplot as plt
+from pathlib import Path
+from scipy.cluster.hierarchy import fcluster, linkage
+
+from core import create_cluster_dict, create_embeddings
 from src import umap
 from src.umap import plot
 from fire import Fire
-import os
 
 from ginv.istanbul_ein_dataset import IstanbulEinDataset
 from ginv.insider_network_snapshot_dataset import (
@@ -168,11 +172,11 @@ def node_graph_sparse_umap(
 def node_graph_umap(
     node_count=0,
     knn_method="multilevel",
-    parametric_umap=False,
     # all_n_neighbours=[128, 64, 32, 16, 8, 4],
     all_n_neighbours=[32, 16, 8, 4, 2],
     plots_dir="./plots/umap",
     embeddings_dir="./data/embeddings",
+    clusters_dir="./data/clusters",
     name_suffix="",
     save_and_load_knn=True,
     knns_dir="./data/knn",
@@ -184,7 +188,7 @@ def node_graph_umap(
     plot_connections=True,
     plot_connections_hammer=True,
     subplot_size=25,
-    dataset=None
+    dataset=None,
 ):
 
     insider_snapshot_aggregation = SnapshotAggregation(insider_snapshot_aggregation)
@@ -197,6 +201,12 @@ def node_graph_umap(
     )
     embeddings_dir = (
         Path(embeddings_dir)
+        / f"node_graph{'_n' if normalize_data else ''}"
+        / dataset_name
+        / knn_method
+    )
+    clusters_dir = (
+        Path(clusters_dir)
         / f"node_graph{'_n' if normalize_data else ''}"
         / dataset_name
         / knn_method
@@ -229,12 +239,14 @@ def node_graph_umap(
 
         plots_dir /= extra_path
         embeddings_dir /= extra_path
+        clusters_dir /= extra_path
 
     else:
         raise ValueError(f"Unknown dataset name {dataset_name}")
 
     os.makedirs(plots_dir, exist_ok=True)
     os.makedirs(embeddings_dir, exist_ok=True)
+    os.makedirs(clusters_dir, exist_ok=True)
 
     if save_and_load_knn:
         os.makedirs(knns_dir, exist_ok=True)
@@ -299,11 +311,50 @@ def node_graph_umap(
         print(f"Fitting umap for {name}")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            reducer = umap.UMAP(
+            reducer: Any = umap.UMAP(
                 n_neighbors=n_neighbours, precomputed_knn=(knn, knn_distances)
             )
 
             mapper = reducer.fit(umap_data)
+
+        print(f"Saving embeddings for {name}")
+        embeddings = create_embeddings(reducer, umap_data)
+        save_embeddings(embeddings, f"{embeddings_dir}/embeddings_{name}")
+
+        print(f"Clustering for {name}")
+
+        embeddings[np.where(np.isnan(embeddings))] = 0
+        cluster_linkage = linkage(embeddings, "ward")
+
+        all_cluster_count_limits = [2, 5, 10, 20, 30, 40, 50, 100, 200]
+        box_size = math.ceil(math.sqrt(len(all_cluster_count_limits)))
+
+        figure, axarr = plt.subplots(
+            box_size,
+            box_size,
+            figsize=(subplot_size * box_size, subplot_size * box_size),
+        )
+
+        for i, d in enumerate(all_cluster_count_limits):
+            clusters = fcluster(cluster_linkage, d, "maxclust")
+            clusters.tofile(f"{clusters_dir}/clusters_count_{d}_{name}.bin")
+
+            cluster_dict = create_cluster_dict(clusters)
+
+            ax = umap.plot.points(
+                mapper,
+                labels=clusters,
+                ax=axarr[i % box_size, i // box_size],
+                theme="blue",
+            )
+            ax.title.set_text(f"Clusters. Max count: {d}, n_neighbours: {n_neighbours}")
+
+            for cluster_id, nodes in cluster_dict.items():
+                coordinates = embeddings.take(nodes, axis=0)
+                text = ax.annotate(f"Cluster {cluster_id}", coordinates.mean(axis=0))
+                text.set_alpha(0.4)
+
+        figure.savefig(f"{plots_dir}/{name}_clusters.png")
 
         print(f"Plotting for {plots_dir}/{name}")
 
@@ -357,21 +408,21 @@ def node_graph_umap(
             plt.savefig(f"{plots_dir}/{name}_connectivity.png")
 
         if plot_connections_hammer:
-            umap.plot.connectivity(
-                mapper,
-                show_points=True,
-                labels=labels,
-                width=subplot_size * 100,
-                height=subplot_size * 100,
-                edge_bundling="hammer",
-            )
-            plt.savefig(f"{plots_dir}/{name}_connectivity_hammer.png")
-
-        # print(f"Saving embeddings for {name}")
-        # embeddings = reducer.transform(umap_data)
-        # save_embeddings(embeddings, f"{embeddings_dir}/embeddings_{name}", )
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                umap.plot.connectivity(
+                    mapper,
+                    show_points=True,
+                    labels=labels,
+                    width=subplot_size * 100,
+                    height=subplot_size * 100,
+                    edge_bundling="hammer",
+                )
+                plt.savefig(f"{plots_dir}/{name}_connectivity_hammer.png")
 
         print()
+
+    print("Done")
 
 
 def node_umap(

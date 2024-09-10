@@ -9,3 +9,4 @@ tqdm
 pynndescent
 umap-learn[plot]
 dask[dataframe]
+scipy
