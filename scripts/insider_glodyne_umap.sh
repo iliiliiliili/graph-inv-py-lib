@@ -28,11 +28,33 @@ GLODYNE_PATH="../GloDyNE"
 
 conda activate iin
 
-if [[ $STEPS == *"0"* ]]
+if [[ $STEPS == *"local_prepare"* ]]
 then
-    echo -e "${GREEN}Prepare${ENDCOLOR}"
+    echo -e "${GREEN}Run local prepare${ENDCOLOR}"
     PYTHONPATH=. python src/prepare.py prepare_insiders_for_glodyne --days="[$1,$2]" --save_path="./data/prepared/$NAME.pkl"
     cp ${WORKSPACE_PATH}/data/prepared/$NAME.pkl $GLODYNE_PATH/data/$NAME.pkl
+fi
+
+if [[ $STEPS == *"0"* ]]
+then
+    echo -e "${GREEN}Run remote prepare${ENDCOLOR}"
+    
+    cat >$WORKSPACE_PATH/srun.sh <<EOL
+cd graph-inv-py-lib
+source activate graph-inv-py-lib
+PYTHONPATH=. MPLCONFIGDIR=/tmp python src/prepare.py prepare_insiders_for_glodyne --days="[$1,$2]" --save_path="./data/prepared/$NAME.pkl"
+EOL
+
+    rsync -avz --exclude="plots" $WORKSPACE_PATH/* $narid:~/graph-inv-py-lib/
+    rsync -avz $WORKSPACE_PATH/data/insider-network/* $narid:~/graph-inv-py-lib/data/insider-network/
+    cnar << EOF
+  hostname
+  srun --partition=test --mem=10000 --time=4:0:0 bash graph-inv-py-lib/srun.sh
+EOF
+
+    rsync -avz $narid:~/graph-inv-py-lib/data/prepared $WORKSPACE_PATH/data/
+    cp ${WORKSPACE_PATH}/data/prepared/$NAME.pkl $GLODYNE_PATH/data/$NAME.pkl
+
 fi
 
 if [[ $STEPS == *"1"* ]]
