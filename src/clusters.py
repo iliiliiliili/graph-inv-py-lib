@@ -3,6 +3,7 @@ import numpy as np
 from typing import List
 from pathlib import Path
 from fire import Fire
+from glob import glob
 
 from core import create_cluster_dict
 from ginv.insider_network_dynamic_dataset import InsiderNetworkDynamicDataset
@@ -34,8 +35,14 @@ def describe_cluster_by_feature(
         mx = np.max(features)
         mn = np.min(features)
 
+        has_zero = False
+
+        if mn == 0 and mx != 0:
+            has_zero=True
+            mn = np.min(features.take(np.where(features != 0)))
+
         score = 1 - min((mx - mn) / max_difference, 1)
-        result = f"{name: <15} similarity={score:.2f}, range=[{mn}, {mx}], mean={np.mean(features.take(np.where(features != 0))):.2f}"
+        result = f"{name: <15} similarity={score:.2f}, range=[{mn}{'*' if has_zero else ''}, {mx}], mean={np.mean(features.take(np.where(features != 0))):.2f}"
 
         return result, score
 
@@ -53,7 +60,7 @@ def describe_cluster_by_feature(
     if "year_of_birth" in label_feature:
         features = np.copy(dataset.node_year_of_birth).take(nodes)
         features -= features % 5
-        return describe_and_score_by_entries("Year of birth:", features, 10, max_entries_to_show=3)
+        return describe_and_score_by_entries("Year of birth:", features, 20, max_entries_to_show=3)
     elif "gender" in label_feature:
         features = np.copy(dataset.node_gender).take(nodes)
         return describe_and_score_by_entries("Gender:", features, 1, max_entries_to_show=2)
@@ -70,7 +77,7 @@ def describe_cluster_by_feature(
     elif "birthday" in label_feature:
         features = np.copy(dataset.node_birthday).take(nodes)
         features -= features % 5
-        return describe_and_score_by_entries("Birthday:", features, 10)
+        return describe_and_score_by_entries("Birthday:", features, 20)
     elif "country" in label_feature:
         features = np.copy(dataset.node_country).take(nodes)
         return describe_and_score_by_entries("Country:", features, 2)
@@ -84,15 +91,21 @@ def describe_cluster_by_feature(
         raise ValueError()
 
 def analyze_cluster_labels_insiders(
-    clusters_path: str,
+    clusters_paths: str | List[str],
     days: List[int] = [0, 501],
     dataset_path="./data/insider-network",
     ignore_features=["birthday"],
     max_entries_to_show=7,
     max_normalized_std=0.6,
+    show=True,
+    min_cluster_size_scored=15,
 ):
-    save_path = clusters_path + ".description"
-    clusters_path = Path(clusters_path)
+    clusters_paths = Path(clusters_paths)
+
+    if os.path.exists(clusters_paths):
+        clusters_paths = [clusters_paths]
+    else:
+        clusters_paths = [Path(a) for a in glob(str(clusters_paths)) if ".description" not in a]
 
     days = parse_insider_days(days)
 
@@ -105,55 +118,75 @@ def analyze_cluster_labels_insiders(
     snapshot = dataset.snapshots[0]
     label_features = [a.replace(".bin", "") for a in snapshot.feature_files]
 
-    clusters = np.fromfile(clusters_path, np.int32)
-    cluster_dict = create_cluster_dict(clusters)
+    all_cluster_scores = []
 
-    result = []
+    for cluster_path in clusters_paths:
+        
+        save_path = str(cluster_path) + ".description"
 
-    for cluster_id in sorted([*cluster_dict.keys()]):
+        clusters = np.fromfile(cluster_path, np.int32)
+        cluster_dict = create_cluster_dict(clusters)
 
-        nodes = cluster_dict[cluster_id]
+        result = []
 
-        descriptions = []
-        total_score = 0
+        for cluster_id in sorted([*cluster_dict.keys()]):
 
-        for label in label_features:
+            nodes = cluster_dict[cluster_id]
 
-            ignore = False
-
-            for f in ignore_features:
-                if f in label:
-                    ignore = True
-
-            if ignore:
+            if len(nodes) < min_cluster_size_scored:
                 continue
 
-            descriptions.append(
-                describe_cluster_by_feature(
-                    snapshot, nodes, label, max_entries_to_show, max_normalized_std
+            descriptions = []
+            total_score = 0
+
+            for label in label_features:
+
+                ignore = False
+
+                for f in ignore_features:
+                    if f in label:
+                        ignore = True
+
+                if ignore:
+                    continue
+
+                descriptions.append(
+                    describe_cluster_by_feature(
+                        snapshot, nodes, label, max_entries_to_show, max_normalized_std
+                    )
                 )
+
+            descriptions = sorted(descriptions, key=lambda x: -x[1])
+            total_score = sum(a[1] for a in descriptions)
+
+            cluster_description = "\n".join(["    " + a[0] for a in descriptions])
+            cluster_description = (
+                f"Cluster {cluster_id} with {len(nodes)} nodes:\n"
+                + cluster_description
+                + "\n"
             )
 
-        descriptions = sorted(descriptions, key=lambda x: -x[1])
-        total_score = sum(a[1] for a in descriptions)
+            result.append((cluster_description, total_score))
 
-        cluster_description = "\n".join(["    " + a[0] for a in descriptions])
-        cluster_description = (
-            f"Cluster {cluster_id} with {len(nodes)} nodes:\n"
-            + cluster_description
-            + "\n"
-        )
+        result = sorted(result, key=lambda x: -x[1])
+        final_score = sum([a[1] for a in result]) / len(result)
 
-        result.append((cluster_description, total_score))
+        all_cluster_scores.append((final_score, f"{cluster_path}.description"))
 
-    result = sorted(result, key=lambda x: -x[1])
+        result = "\n".join([a[0] for a in result])
+        
+        if show:
+            print(f"Score: {final_score} Cluster set: {cluster_path}")
+            print(result)
 
-    result = "\n".join([a[0] for a in result])
+        with open(save_path, "w") as f:
+            print(result, file=f)
 
-    print(result)
 
-    with open(save_path, "w") as f:
-        print(result, file=f)
+    all_cluster_scores = sorted(all_cluster_scores, key=lambda x: -x[0])
+
+    for score, description in all_cluster_scores:
+        print(f"Score: {score} Cluster set: {description}")
 
     print("Done")
 
