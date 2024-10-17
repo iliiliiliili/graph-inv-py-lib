@@ -171,7 +171,7 @@ def node_graph_sparse_umap(
 
 def node_graph_umap(
     node_count=0,
-    knn_method="multilevel",
+    knn_method="multilevel+",
     # all_n_neighbours=[128, 64, 32, 16, 8, 4],
     all_n_neighbours=[32, 16, 8, 4, 2],
     plots_dir="./plots/umap",
@@ -273,6 +273,7 @@ def node_graph_umap(
     knn_function = {
         "simple": transform_graph_for_umap_node_knn_simple,
         "simple_full": transform_graph_for_umap_node_knn_simple_full,
+        "multilevel+": lambda *args, **kwargs: transform_graph_for_umap_node_knn_multilevel(*args, **kwargs, default_negative_one=True),
         "multilevel": transform_graph_for_umap_node_knn_multilevel,
     }[knn_method]
 

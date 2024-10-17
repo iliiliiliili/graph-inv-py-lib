@@ -13,7 +13,7 @@ then
 fi
 
 if [ $# -lt 2 ]; then
-    echo "${RED}Days are not provided${ENDCOLOR}"
+    echo -e "${RED}Days are not provided${ENDCOLOR}"
     exit 1
 fi
 
@@ -49,7 +49,7 @@ EOL
     rsync -avz $WORKSPACE_PATH/data/insider-network/* $narid:~/graph-inv-py-lib/data/insider-network/
     cnar << EOF
   hostname
-  srun --partition=test --mem=10000 --time=4:0:0 bash graph-inv-py-lib/srun.sh
+  srun --partition=test --mem=40000 --time=4:0:0 bash graph-inv-py-lib/srun.sh
 EOF
 
     rsync -avz $narid:~/graph-inv-py-lib/data/prepared $WORKSPACE_PATH/data/
@@ -73,7 +73,7 @@ EOL
     rsync -avz ~/GloDyNE $narid:~/
     cnar << EOF
   hostname
-  srun --partition=test --mem=10000 --time=4:0:0 bash GloDyNE/srun.sh
+  srun --partition=test --mem=40000 --time=4:0:0 bash GloDyNE/srun.sh
 EOF
     rsync -avz $narid:~/GloDyNE/output/* ${GLODYNE_PATH}/output/
 
@@ -106,7 +106,7 @@ EOL
     rsync -avz $WORKSPACE_PATH/data/insider-network/* $narid:~/graph-inv-py-lib/data/insider-network/
     cnar << EOF
   hostname
-  srun --partition=test --mem=10000 --time=4:0:0 bash graph-inv-py-lib/srun.sh
+  srun --partition=test --mem=40000 --time=4:0:0 bash graph-inv-py-lib/srun.sh
 EOF
     
     rsync -avz $narid:~/graph-inv-py-lib/data/clusters $WORKSPACE_PATH/data/

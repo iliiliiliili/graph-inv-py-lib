@@ -244,9 +244,14 @@ def transform_graph_for_umap_node_knn_multilevel(
     dtype=np.int32,
     epsilon=0.0001,
     use_weights=True,
+    default_negative_one=True,
 ):
 
-    result = np.zeros([graph.node_count, neighbours_count], dtype=dtype)
+    if default_negative_one:
+        result = -1 * np.ones([graph.node_count, neighbours_count], dtype=dtype)
+    else:
+        result = np.zeros([graph.node_count, neighbours_count], dtype=dtype)
+
     distances = (
         np.ones([graph.node_count, neighbours_count], dtype=np.float32) / epsilon
     )

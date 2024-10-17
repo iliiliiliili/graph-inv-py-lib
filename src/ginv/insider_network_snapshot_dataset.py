@@ -18,7 +18,7 @@ class SnapshotAggregation(Enum):
 
 def read(file_name: str, dtype):
     current_data = np.fromfile(file_name, dtype=dtype)
-    print(f"loaded {file_name}")
+    print(f"loaded {file_name}\t\t\t  ", end="\r")
 
     return current_data
 
