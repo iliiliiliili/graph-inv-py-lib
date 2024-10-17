@@ -14,6 +14,7 @@ def node_graph_umap_with_extra_embeddings(
     extra_feature_aggregation: ExtraFeaturesAggregation = ExtraFeaturesAggregation.MEAN,
     embeddings_path="../GloDyNE/output/insider_DynWalks.pkl",
     dataset_path="./data/insider-network",
+    embeddings_count=64,
 ):
     snapshot_aggregation = SnapshotAggregation(snapshot_aggregation)
     extra_feature_aggregation = ExtraFeaturesAggregation(extra_feature_aggregation)
@@ -35,7 +36,8 @@ def node_graph_umap_with_extra_embeddings(
         dataset_name="insider_snapshot",
         insider_snapshot_day_ids=snapshot_days,
         insider_snapshot_aggregation=snapshot_aggregation,
-        dataset=snapshot
+        dataset=snapshot,
+        embeddings_count=64,
     )
 
     print("Done")

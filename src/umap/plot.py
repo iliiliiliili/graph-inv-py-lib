@@ -650,7 +650,8 @@ def points(
             values = values[subset_points]
 
     if points.shape[1] != 2:
-        raise ValueError("Plotting is currently only implemented for 2D embeddings")
+        print("Plotting is currently only implemented for 2D embeddings, taking first two dimensions")
+        points = points[:, :2]
 
     font_color = _select_font_color(background)
 
@@ -859,7 +860,7 @@ def connectivity(
         edge_cmap = _themes[theme]["edge_cmap"]
         background = _themes[theme]["background"]
 
-    points = _get_embedding(umap_object)
+    points = _get_embedding(umap_object)[:, :2]
     point_df = pd.DataFrame(points, columns=("x", "y"))
 
     point_size = 100.0 / np.sqrt(points.shape[0])

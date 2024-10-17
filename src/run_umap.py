@@ -189,6 +189,7 @@ def node_graph_umap(
     plot_connections_hammer=True,
     subplot_size=25,
     dataset=None,
+    embeddings_count=2,
 ):
 
     insider_snapshot_aggregation = SnapshotAggregation(insider_snapshot_aggregation)
@@ -273,7 +274,9 @@ def node_graph_umap(
     knn_function = {
         "simple": transform_graph_for_umap_node_knn_simple,
         "simple_full": transform_graph_for_umap_node_knn_simple_full,
-        "multilevel+": lambda *args, **kwargs: transform_graph_for_umap_node_knn_multilevel(*args, **kwargs, default_negative_one=True),
+        "multilevel+": lambda *args, **kwargs: transform_graph_for_umap_node_knn_multilevel(
+            *args, **kwargs, default_negative_one=True
+        ),
         "multilevel": transform_graph_for_umap_node_knn_multilevel,
     }[knn_method]
 
@@ -313,7 +316,9 @@ def node_graph_umap(
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             reducer: Any = umap.UMAP(
-                n_neighbors=n_neighbours, precomputed_knn=(knn, knn_distances)
+                n_neighbors=n_neighbours,
+                precomputed_knn=(knn, knn_distances),
+                n_components=embeddings_count,
             )
 
             mapper = reducer.fit(umap_data)
@@ -352,7 +357,7 @@ def node_graph_umap(
 
             for cluster_id, nodes in cluster_dict.items():
                 coordinates = embeddings.take(nodes, axis=0)
-                text = ax.annotate(f"Cluster {cluster_id}", coordinates.mean(axis=0))
+                text = ax.annotate(f"Cluster {cluster_id}", coordinates.mean(axis=0)[:2])
                 text.set_alpha(0.4)
 
         figure.savefig(f"{plots_dir}/{name}_clusters.png")
