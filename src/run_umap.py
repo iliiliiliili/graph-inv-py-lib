@@ -190,6 +190,7 @@ def node_graph_umap(
     subplot_size=25,
     dataset=None,
     embeddings_count=2,
+    active_nodes=None,
 ):
 
     insider_snapshot_aggregation = SnapshotAggregation(insider_snapshot_aggregation)
@@ -247,6 +248,7 @@ def node_graph_umap(
 
     os.makedirs(plots_dir, exist_ok=True)
     os.makedirs(embeddings_dir, exist_ok=True)
+    os.makedirs(embeddings_dir / "input", exist_ok=True)
     os.makedirs(clusters_dir, exist_ok=True)
 
     if save_and_load_knn:
@@ -325,7 +327,11 @@ def node_graph_umap(
 
         print(f"Saving embeddings for {name}")
         embeddings = create_embeddings(reducer, umap_data)
-        save_embeddings(embeddings, f"{embeddings_dir}/embeddings_{name}")
+        save_embeddings(embeddings, f"{embeddings_dir}/embeddings_{name}_{embeddings_count}dim")
+        save_embeddings(umap_data, f"{embeddings_dir}/input/input_embeddings_{name}_{umap_data.shape[1]}dim")
+
+        if active_nodes is not None:
+            np.array(active_nodes, dtype=np.int32).tofile(f"{embeddings_dir}/embeddings_{name}_{embeddings_count}dim.active_nodes.bin")
 
         print(f"Clustering for {name}")
 
@@ -362,7 +368,7 @@ def node_graph_umap(
 
         figure.savefig(f"{plots_dir}/{name}_clusters.png")
 
-        print(f"Plotting for {plots_dir}/{name}")
+        print(f"Plotting for {plots_dir}/{name}.png")
 
         box_size = math.ceil(math.sqrt(len(label_features)))
 

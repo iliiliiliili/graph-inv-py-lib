@@ -82,7 +82,8 @@ class InsiderNetworkDynamicDataset:
             for t in snapshot.connections.tos:
                 active_nodes.add(t)
 
-        self.active_nodes = list(active_nodes)
+        self.active_nodes = sorted(list(active_nodes))
+
         self.snapshots[0].take_nodes(self.active_nodes)
 
         if self.extra_features is not None:
@@ -98,6 +99,8 @@ class InsiderNetworkDynamicDataset:
             for i in range(snapshot.connection_count):
                 snapshot.connections.froms[i] = node_id_map[snapshot.connections.froms[i]]
                 snapshot.connections.tos[i] = node_id_map[snapshot.connections.tos[i]]
+        
+        return self.active_nodes
 
     def aggregate_snapshots(
         self,

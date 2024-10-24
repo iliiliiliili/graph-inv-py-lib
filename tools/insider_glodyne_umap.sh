@@ -82,10 +82,10 @@ fi
 if [[ $STEPS == *"local_umap"* ]]
 then
     echo -e "${GREEN}Run local dynamic umap${ENDCOLOR}"
-    PYTHONPATH=. python src/dynamic_insider_umap.py node_graph_umap_with_extra_embeddings --days="[$1,$2]" --snapshot_days="[$1,$2]" --embeddings_path="../GloDyNE/output/${NAME}_DynWalks.pkl" --extra_feature_aggregation="mean" --snapshot_aggregation="once"
-    PYTHONPATH=. python src/dynamic_insider_umap.py node_graph_umap_with_extra_embeddings --days="[$1,$2]" --snapshot_days="[$1,$2]" --embeddings_path="../GloDyNE/output/${NAME}_DynWalks.pkl" --extra_feature_aggregation="max" --snapshot_aggregation="once"
-    PYTHONPATH=. python src/dynamic_insider_umap.py node_graph_umap_with_extra_embeddings --days="[$1,$2]" --snapshot_days="[$1,$2]" --embeddings_path="../GloDyNE/output/${NAME}_DynWalks.pkl" --extra_feature_aggregation="mean" --snapshot_aggregation="most_days"
-    PYTHONPATH=. python src/dynamic_insider_umap.py node_graph_umap_with_extra_embeddings --days="[$1,$2]" --snapshot_days="[$1,$2]" --embeddings_path="../GloDyNE/output/${NAME}_DynWalks.pkl" --extra_feature_aggregation="max" --snapshot_aggregation="most_days"
+    PYTHONPATH=. python src/dynamic_insider_umap.py node_graph_umap_with_extra_embeddings --days="[$1,$2]" --embeddings_path="../GloDyNE/output/${NAME}_DynWalks.pkl" --extra_feature_aggregation="mean" --snapshot_aggregation="once"
+    PYTHONPATH=. python src/dynamic_insider_umap.py node_graph_umap_with_extra_embeddings --days="[$1,$2]" --embeddings_path="../GloDyNE/output/${NAME}_DynWalks.pkl" --extra_feature_aggregation="max" --snapshot_aggregation="once"
+    PYTHONPATH=. python src/dynamic_insider_umap.py node_graph_umap_with_extra_embeddings --days="[$1,$2]" --embeddings_path="../GloDyNE/output/${NAME}_DynWalks.pkl" --extra_feature_aggregation="mean" --snapshot_aggregation="most_days"
+    PYTHONPATH=. python src/dynamic_insider_umap.py node_graph_umap_with_extra_embeddings --days="[$1,$2]" --embeddings_path="../GloDyNE/output/${NAME}_DynWalks.pkl" --extra_feature_aggregation="max" --snapshot_aggregation="most_days"
 
 fi
 
@@ -96,10 +96,10 @@ then
     cat >$WORKSPACE_PATH/srun.sh <<EOL
 cd graph-inv-py-lib
 source activate graph-inv-py-lib
-PYTHONPATH=. MPLCONFIGDIR=/tmp python src/dynamic_insider_umap.py node_graph_umap_with_extra_embeddings --days="[$1,$2]" --snapshot_days="[$1,$2]" --embeddings_path="../GloDyNE/output/${NAME}_DynWalks.pkl" --extra_feature_aggregation="mean" --snapshot_aggregation="once"
-PYTHONPATH=. MPLCONFIGDIR=/tmp python src/dynamic_insider_umap.py node_graph_umap_with_extra_embeddings --days="[$1,$2]" --snapshot_days="[$1,$2]" --embeddings_path="../GloDyNE/output/${NAME}_DynWalks.pkl" --extra_feature_aggregation="max" --snapshot_aggregation="once"
-PYTHONPATH=. MPLCONFIGDIR=/tmp python src/dynamic_insider_umap.py node_graph_umap_with_extra_embeddings --days="[$1,$2]" --snapshot_days="[$1,$2]" --embeddings_path="../GloDyNE/output/${NAME}_DynWalks.pkl" --extra_feature_aggregation="mean" --snapshot_aggregation="most_days"
-PYTHONPATH=. MPLCONFIGDIR=/tmp python src/dynamic_insider_umap.py node_graph_umap_with_extra_embeddings --days="[$1,$2]" --snapshot_days="[$1,$2]" --embeddings_path="../GloDyNE/output/${NAME}_DynWalks.pkl" --extra_feature_aggregation="max" --snapshot_aggregation="most_days"
+PYTHONPATH=. MPLCONFIGDIR=/tmp python src/dynamic_insider_umap.py node_graph_umap_with_extra_embeddings --days="[$1,$2]" --embeddings_path="../GloDyNE/output/${NAME}_DynWalks.pkl" --extra_feature_aggregation="mean" --snapshot_aggregation="once"
+PYTHONPATH=. MPLCONFIGDIR=/tmp python src/dynamic_insider_umap.py node_graph_umap_with_extra_embeddings --days="[$1,$2]" --embeddings_path="../GloDyNE/output/${NAME}_DynWalks.pkl" --extra_feature_aggregation="max" --snapshot_aggregation="once"
+PYTHONPATH=. MPLCONFIGDIR=/tmp python src/dynamic_insider_umap.py node_graph_umap_with_extra_embeddings --days="[$1,$2]" --embeddings_path="../GloDyNE/output/${NAME}_DynWalks.pkl" --extra_feature_aggregation="mean" --snapshot_aggregation="most_days"
+PYTHONPATH=. MPLCONFIGDIR=/tmp python src/dynamic_insider_umap.py node_graph_umap_with_extra_embeddings --days="[$1,$2]" --embeddings_path="../GloDyNE/output/${NAME}_DynWalks.pkl" --extra_feature_aggregation="max" --snapshot_aggregation="most_days"
 EOL
 
     rsync -avz --exclude="plots" $WORKSPACE_PATH/* $narid:~/graph-inv-py-lib/
@@ -108,10 +108,13 @@ EOL
   hostname
   srun --partition=test --mem=40000 --time=4:0:0 bash graph-inv-py-lib/srun.sh
 EOF
-    
+
     rsync -avz $narid:~/graph-inv-py-lib/data/clusters $WORKSPACE_PATH/data/
     rsync -avz $narid:~/graph-inv-py-lib/data/embeddings $WORKSPACE_PATH/data/
     rsync -avz $narid:~/graph-inv-py-lib/data/knn $WORKSPACE_PATH/data/
     rsync -avz $narid:~/graph-inv-py-lib/plots $WORKSPACE_PATH/
 
 fi
+
+
+# bash -i tools/insider_glodyne_umap.sh 3654 5476 012 | for iind
